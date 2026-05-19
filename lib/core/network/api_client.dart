@@ -7,8 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'api_client.g.dart';
 
-// TODO: Replace with ApiUrl output from `cdk deploy`
-const _baseUrl = 'REPLACE_WITH_API_GATEWAY_URL';
+const _baseUrl = 'https://r1x170wrfl.execute-api.us-east-2.amazonaws.com';
 
 class ApiClient {
   Future<http.Response> get(String path) async {

@@ -13,52 +13,19 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
 
-  @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _passwordCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _signIn() async {
-    if (!_formKey.currentState!.validate()) return;
-    _setLoading(true);
+  Future<void> _signInWithSocial(AuthProvider provider) async {
+    setState(() { _loading = true; _error = null; });
     try {
-      await ref
-          .read(authNotifierProvider.notifier)
-          .signIn(_emailCtrl.text.trim(), _passwordCtrl.text);
+      await ref.read(authNotifierProvider.notifier).signInWithSocial(provider);
+      // Auth state change triggers router redirect automatically
     } catch (e) {
-      _setError(e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      _setLoading(false);
+      if (mounted) setState(() => _loading = false);
     }
-  }
-
-  Future<void> _signInSocial(AuthProvider provider) async {
-    _setLoading(true);
-    try {
-      await ref
-          .read(authNotifierProvider.notifier)
-          .signInWithSocial(provider);
-    } catch (e) {
-      _setError(e.toString());
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  void _setLoading(bool v) {
-    if (mounted) setState(() => _loading = v);
-  }
-
-  void _setError(String? v) {
-    if (mounted) setState(() => _error = v);
   }
 
   @override
@@ -71,114 +38,114 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 32),
-                    Text(
-                      'GlazeVault',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'For the love of glaze.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 48),
-                    TextFormField(
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (v) =>
-                          v == null || !v.contains('@') ? 'Enter a valid email' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordCtrl,
-                      obscureText: true,
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _signIn(),
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: Icon(Icons.lock_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (v) => v == null || v.length < 8
-                          ? 'Password must be at least 8 characters'
-                          : null,
-                    ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _error!,
-                        style: TextStyle(color: scheme.error),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 48),
+                  Text(
+                    'GlazeVault',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'For the love of glaze.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 56),
+                  _SocialButton(
+                    label: 'Continue with Google',
+                    icon: _GoogleIcon(),
+                    onPressed: _loading
+                        ? null
+                        : () => _signInWithSocial(AuthProvider.google),
+                  ),
+                  const SizedBox(height: 12),
+                  _SocialButton(
+                    label: 'Continue with Facebook',
+                    icon: const Icon(Icons.facebook,
+                        color: Color(0xFF1877F2), size: 20),
+                    onPressed: _loading
+                        ? null
+                        : () => _signInWithSocial(AuthProvider.facebook),
+                  ),
+                  const SizedBox(height: 12),
+                  _SocialButton(
+                    label: 'Continue with Email',
+                    icon: Icon(Icons.email_outlined,
+                        color: scheme.onSurfaceVariant, size: 20),
+                    onPressed: _loading
+                        ? null
+                        : () => context.push('/login/email'),
+                  ),
+                  if (_loading) ...[
                     const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: _loading ? null : _signIn,
-                      child: _loading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Sign In'),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('or',
-                            style: TextStyle(color: scheme.onSurfaceVariant)),
-                      ),
-                      const Expanded(child: Divider()),
-                    ]),
-                    const SizedBox(height: 24),
-                    OutlinedButton.icon(
-                      onPressed:
-                          _loading ? null : () => _signInSocial(AuthProvider.google),
-                      icon: const Icon(Icons.login),
-                      label: const Text('Continue with Google'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed:
-                          _loading ? null : () => _signInSocial(AuthProvider.facebook),
-                      icon: const Icon(Icons.facebook),
-                      label: const Text('Continue with Facebook'),
-                    ),
-                    const SizedBox(height: 32),
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const Text("Don't have an account?"),
-                      TextButton(
-                        onPressed: () => context.go('/register'),
-                        child: const Text('Create one'),
-                      ),
-                    ]),
+                    const Center(child: CircularProgressIndicator()),
                   ],
-                ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _error!,
+                      style: TextStyle(color: scheme.error),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 48),
+                ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  const _SocialButton(
+      {required this.label, required this.icon, required this.onPressed});
+  final String label;
+  final Widget icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        side: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(width: 20, height: 20, child: icon),
+          const SizedBox(width: 12),
+          Text(label),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoogleIcon extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      'G',
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF4285F4),
       ),
     );
   }

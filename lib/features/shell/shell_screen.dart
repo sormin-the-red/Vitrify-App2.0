@@ -15,24 +15,23 @@ class ShellScreen extends StatelessWidget {
         onDestinationSelected: (index) {
           navigationShell.goBranch(
             index,
-            // Tapping the active tab scrolls back to root of that branch
             initialLocation: index == navigationShell.currentIndex,
           );
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'Recipes',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.groups_outlined),
-            selectedIcon: Icon(Icons.groups),
-            label: 'Community',
+            icon: Icon(Icons.dynamic_feed_outlined),
+            selectedIcon: Icon(Icons.dynamic_feed),
+            label: 'Feed',
           ),
           NavigationDestination(
             icon: Icon(Icons.science_outlined),
             selectedIcon: Icon(Icons.science),
+            label: 'Studio',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.biotech_outlined),
+            selectedIcon: Icon(Icons.biotech),
             label: 'Batches',
           ),
           NavigationDestination(

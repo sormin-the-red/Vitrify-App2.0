@@ -3,20 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_notifier.dart';
-import 'confirm_screen.dart';
 
-class RegisterScreen extends ConsumerStatefulWidget {
-  const RegisterScreen({super.key});
+class EmailLoginScreen extends ConsumerStatefulWidget {
+  const EmailLoginScreen({super.key});
 
   @override
-  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<EmailLoginScreen> createState() => _EmailLoginScreenState();
 }
 
-class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+class _EmailLoginScreenState extends ConsumerState<EmailLoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
 
@@ -24,20 +22,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
-    _confirmCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _register() async {
+  Future<void> _signIn() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final email = _emailCtrl.text.trim();
-      final password = _passwordCtrl.text;
-      await ref.read(authNotifierProvider.notifier).signUp(email, password);
-      if (mounted) {
-        context.push('/confirm', extra: ConfirmArgs(email: email, password: password));
-      }
+      await ref.read(authNotifierProvider.notifier).signIn(
+            _emailCtrl.text.trim(),
+            _passwordCtrl.text,
+          );
+      // Router redirect handles navigation on auth state change
     } catch (e) {
       if (mounted) setState(() => _error = _friendlyError(e));
     } finally {
@@ -47,14 +43,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   String _friendlyError(Object e) {
     final msg = e.toString().toLowerCase();
-    if (msg.contains('usernameexists')) {
-      return 'An account with that email already exists.';
+    if (msg.contains('notauthorized') || msg.contains('user not found')) {
+      return 'Incorrect email or password.';
     }
-    if (msg.contains('invalidpassword') || msg.contains('passwordpolicy')) {
-      return 'Password must be at least 8 characters with an uppercase letter and a number.';
-    }
-    if (msg.contains('invalidemail')) {
-      return 'Enter a valid email address.';
+    if (msg.contains('usernotconfirmed')) {
+      return 'Please confirm your email before signing in.';
     }
     if (msg.contains('networkerror') || msg.contains('socketexception')) {
       return 'No internet connection.';
@@ -66,7 +59,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Account')),
+      appBar: AppBar(title: const Text('Sign In')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -95,39 +88,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     TextFormField(
                       controller: _passwordCtrl,
                       obscureText: true,
-                      textInputAction: TextInputAction.next,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _signIn(),
                       decoration: const InputDecoration(
                         labelText: 'Password',
                         prefixIcon: Icon(Icons.lock_outlined),
                         border: OutlineInputBorder(),
                       ),
-                      validator: (v) {
-                        if (v == null || v.length < 8) {
-                          return 'At least 8 characters';
-                        }
-                        if (!v.contains(RegExp(r'[A-Z]'))) {
-                          return 'Needs an uppercase letter';
-                        }
-                        if (!v.contains(RegExp(r'[0-9]'))) {
-                          return 'Needs a number';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _confirmCtrl,
-                      obscureText: true,
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _register(),
-                      decoration: const InputDecoration(
-                        labelText: 'Confirm Password',
-                        prefixIcon: Icon(Icons.lock_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (v) => v != _passwordCtrl.text
-                          ? 'Passwords do not match'
-                          : null,
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Enter your password' : null,
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -139,7 +108,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ],
                     const SizedBox(height: 24),
                     FilledButton(
-                      onPressed: _loading ? null : _register,
+                      onPressed: _loading ? null : _signIn,
                       child: _loading
                           ? const SizedBox(
                               height: 20,
@@ -147,17 +116,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               child:
                                   CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Create Account'),
+                          : const Text('Sign In'),
                     ),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text('Already have an account?'),
+                        const Text("Don't have an account?"),
                         TextButton(
                           onPressed:
-                              _loading ? null : () => context.pop(),
-                          child: const Text('Sign In'),
+                              _loading ? null : () => context.push('/register'),
+                          child: const Text('Register'),
                         ),
                       ],
                     ),

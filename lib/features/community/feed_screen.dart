@@ -1,22 +1,478 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class FeedScreen extends StatelessWidget {
+import '../../core/auth/auth_gate.dart';
+import '../../core/auth/auth_notifier.dart';
+import '../../core/auth/auth_state.dart';
+import 'community_models.dart';
+import 'community_repository.dart';
+
+class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
+
+  @override
+  ConsumerState<FeedScreen> createState() => _FeedScreenState();
+}
+
+class _FeedScreenState extends ConsumerState<FeedScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Community'),
+        title: const Text('GlazeVault'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.push('/settings'),
+          ),
           IconButton(
             icon: const Icon(Icons.account_circle_outlined),
             onPressed: () => context.push('/profile'),
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: const [
+            Tab(text: 'New'),
+            Tab(text: 'Popular'),
+            Tab(text: 'Schedules'),
+            Tab(text: 'Following'),
+          ],
+        ),
       ),
-      body: const Center(child: Text('Community feed coming soon.')),
+      body: TabBarView(
+        controller: _tabController,
+        children: const [
+          _GlobalFeedTab(filterKey: 'new:all'),
+          _GlobalFeedTab(filterKey: 'popular:all'),
+          _GlobalFeedTab(filterKey: 'new:schedules'),
+          _FollowingTab(),
+        ],
+      ),
     );
+  }
+}
+
+// ── Global feed tab ────────────────────────────────────────────────────────────
+
+class _GlobalFeedTab extends ConsumerWidget {
+  const _GlobalFeedTab({required this.filterKey});
+  final String filterKey;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(globalFeedProvider(filterKey));
+    return async.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            Text('$e', textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 12),
+            FilledButton.tonal(
+              onPressed: () => ref.invalidate(globalFeedProvider(filterKey)),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+      data: (items) => _FeedList(
+        items: items,
+        onRefresh: () async => ref.invalidate(globalFeedProvider(filterKey)),
+      ),
+    );
+  }
+}
+
+// ── Following tab ──────────────────────────────────────────────────────────────
+
+class _FollowingTab extends StatelessWidget {
+  const _FollowingTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return AuthGate(child: const _FollowingFeedContent());
+  }
+}
+
+class _FollowingFeedContent extends ConsumerWidget {
+  const _FollowingFeedContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(followingFeedProvider);
+    return async.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('$e')),
+      data: (items) {
+        if (items.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.people_outline, size: 56, color: Colors.grey),
+                SizedBox(height: 12),
+                Text('No one to follow yet.',
+                    style: TextStyle(color: Colors.grey)),
+                SizedBox(height: 4),
+                Text('Explore New or Popular to find potters.',
+                    style: TextStyle(color: Colors.grey, fontSize: 12)),
+              ],
+            ),
+          );
+        }
+        return _FeedList(
+          items: items,
+          onRefresh: () async => ref.invalidate(followingFeedProvider),
+        );
+      },
+    );
+  }
+}
+
+// ── Feed list ──────────────────────────────────────────────────────────────────
+
+class _FeedList extends StatelessWidget {
+  const _FeedList({required this.items, required this.onRefresh});
+  final List<FeedItem> items;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: ListView(
+          children: const [
+            SizedBox(height: 120),
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.auto_awesome_outlined,
+                      size: 56, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Text('Nothing here yet.',
+                      style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        itemCount: items.length,
+        itemBuilder: (ctx, i) => _FeedCard(item: items[i]),
+      ),
+    );
+  }
+}
+
+// ── Feed card ──────────────────────────────────────────────────────────────────
+
+class _FeedCard extends ConsumerWidget {
+  const _FeedCard({required this.item});
+  final FeedItem item;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final isRecipe = item.isRecipe;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.push(
+            isRecipe ? '/recipe/${item.id}' : '/schedule/${item.id}'),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Thumbnail or icon
+              _Thumbnail(item: item),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Type badge + name
+                    Row(
+                      children: [
+                        _TypeBadge(isRecipe: isRecipe, scheme: scheme),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 15),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (item.description.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        item.description,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: scheme.onSurfaceVariant),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    // Meta row
+                    Row(
+                      children: [
+                        ..._metaChips(item),
+                        const Spacer(),
+                        _HeartButton(item: item),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _metaChips(FeedItem item) {
+    final chips = <Widget>[];
+    if (item.isRecipe && item.cone != null && item.cone!.isNotEmpty) {
+      chips.add(_MetaChip(label: 'C${item.cone}',
+          icon: Icons.local_fire_department_outlined));
+    }
+    if (!item.isRecipe && item.maxCone != null && item.maxCone!.isNotEmpty) {
+      chips.add(_MetaChip(label: 'C${item.maxCone}',
+          icon: Icons.thermostat_outlined));
+    }
+    if (!item.isRecipe && item.tempScale != null &&
+        item.tempScale!.isNotEmpty) {
+      chips.add(_MetaChip(label: '°${item.tempScale}',
+          icon: Icons.device_thermostat));
+    }
+    if (item.isRecipe && item.firingType != null &&
+        item.firingType!.isNotEmpty) {
+      chips.add(_MetaChip(label: item.firingType!, icon: null));
+    }
+    return chips;
+  }
+}
+
+class _Thumbnail extends StatelessWidget {
+  const _Thumbnail({required this.item});
+  final FeedItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (item.imageUrl != null && item.imageUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          item.imageUrl!,
+          width: 64,
+          height: 64,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _PlaceholderIcon(
+              isRecipe: item.isRecipe, scheme: scheme),
+        ),
+      );
+    }
+    return _PlaceholderIcon(isRecipe: item.isRecipe, scheme: scheme);
+  }
+}
+
+class _PlaceholderIcon extends StatelessWidget {
+  const _PlaceholderIcon({required this.isRecipe, required this.scheme});
+  final bool isRecipe;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        isRecipe ? Icons.science_outlined : Icons.local_fire_department_outlined,
+        size: 28,
+        color: scheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+class _TypeBadge extends StatelessWidget {
+  const _TypeBadge({required this.isRecipe, required this.scheme});
+  final bool isRecipe;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: isRecipe
+            ? scheme.primaryContainer
+            : scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        isRecipe ? 'Recipe' : 'Schedule',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: isRecipe
+              ? scheme.onPrimaryContainer
+              : scheme.onSecondaryContainer,
+        ),
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({required this.label, required this.icon});
+  final String label;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            const SizedBox(width: 2),
+          ],
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  color:
+                      Theme.of(context).colorScheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Heart button (optimistic) ──────────────────────────────────────────────────
+
+class _HeartButton extends ConsumerStatefulWidget {
+  const _HeartButton({required this.item});
+  final FeedItem item;
+
+  @override
+  ConsumerState<_HeartButton> createState() => _HeartButtonState();
+}
+
+class _HeartButtonState extends ConsumerState<_HeartButton> {
+  late int _count;
+  bool _hearted = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _count = widget.item.likeCount;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: _busy ? null : _toggle,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _hearted ? Icons.favorite : Icons.favorite_border,
+            size: 16,
+            color: _hearted ? scheme.error : scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            '$_count',
+            style: TextStyle(
+                fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggle() async {
+    final auth = ref.read(authNotifierProvider);
+    if (auth is! AuthAuthenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in to like items')),
+      );
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _hearted = !_hearted;
+      _count += _hearted ? 1 : -1;
+    });
+
+    try {
+      final repo = ref.read(communityRepositoryProvider);
+      if (_hearted) {
+        await repo.heart(widget.item);
+      } else {
+        await repo.unheart(widget.item);
+      }
+    } catch (_) {
+      // Revert on failure
+      if (mounted) {
+        setState(() {
+          _hearted = !_hearted;
+          _count += _hearted ? 1 : -1;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }
