@@ -992,10 +992,10 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
                                   size: 16, color: scheme.error))
                           : null,
                       dense: true,
-                      onTap: () => setState(() {
-                        _selected = m.name;
+                      onTap: () {
+                        setState(() => _selected = m.name);
                         FocusScope.of(context).nextFocus();
-                      }),
+                      },
                     );
                   },
                 );
@@ -1036,6 +1036,7 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
                     onTap: () => _amountCtrl.selection = TextSelection(
                         baseOffset: 0,
                         extentOffset: _amountCtrl.text.length),
+                    onChanged: (_) => setState(() {}),
                     onSubmitted: (_) => _confirm(),
                   ),
                 ),
