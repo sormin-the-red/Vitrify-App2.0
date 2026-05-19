@@ -23,7 +23,7 @@ final sharedPreferencesProvider = Provider<SharedPreferences>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef SharedPreferencesRef = ProviderRef<SharedPreferences>;
-String _$settingsNotifierHash() => r'81c362b94859cf7cfdfb2b356b4f1e1bc0931817';
+String _$settingsNotifierHash() => r'c9e4f2a8b1d7e3c6a9f0b5e2d8c1a4f7b0e3d6c9';
 
 /// See also [SettingsNotifier].
 @ProviderFor(SettingsNotifier)

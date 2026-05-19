@@ -3,6 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/settings/settings_provider.dart';
 
+const _cones = [
+  '022','021','020','019','018','017','016','015','014','013',
+  '012','011','010','09','08','07','06','05','04','03','02','01',
+  '1','2','3','4','5','6','7','8','9','10','11','12','13','14',
+];
+const _firingTypes = [
+  'Oxidation', 'Reduction', 'Neutral', 'Soda', 'Wood', 'Salt',
+];
+
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -40,6 +49,41 @@ class SettingsScreen extends ConsumerWidget {
               ],
               selected: {settings.themeMode},
               onSelectionChanged: (modes) => notifier.setThemeMode(modes.first),
+            ),
+          ),
+
+          // ── Recipes ───────────────────────────────────────────────────────
+          const _SectionHeader('Recipes'),
+          ListTile(
+            leading: const Icon(Icons.change_history),
+            title: const Text('Default cone'),
+            trailing: DropdownButton<String>(
+              value: _cones.contains(settings.defaultCone)
+                  ? settings.defaultCone
+                  : '6',
+              underline: const SizedBox.shrink(),
+              items: _cones
+                  .map((c) => DropdownMenuItem(value: c, child: Text('Cone $c')))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) notifier.setDefaultCone(v);
+              },
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.local_fire_department_outlined),
+            title: const Text('Default firing type'),
+            trailing: DropdownButton<String>(
+              value: _firingTypes.contains(settings.defaultFiringType)
+                  ? settings.defaultFiringType
+                  : 'Oxidation',
+              underline: const SizedBox.shrink(),
+              items: _firingTypes
+                  .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) notifier.setDefaultFiringType(v);
+              },
             ),
           ),
 

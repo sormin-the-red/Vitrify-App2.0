@@ -7,7 +7,7 @@ part of 'recipes_repository.dart';
 // **************************************************************************
 
 String _$recipesRepositoryHash() =>
-    r'd1e2f3a4b5c6d1e2f3a4b5c6d1e2f3a4b5c6d1e2';
+    r'e1f2a3b4c5d6e1f2a3b4c5d6e1f2a3b4c5d6e1f2';
 
 /// See also [recipesRepository].
 @ProviderFor(recipesRepository)
@@ -26,7 +26,7 @@ final recipesRepositoryProvider = Provider<RecipesRepository>.internal(
 typedef RecipesRepositoryRef = ProviderRef<RecipesRepository>;
 
 String _$recipesListHash() =>
-    r'e2f3a4b5c6d1e2f3a4b5c6d1e2f3a4b5c6d1e2f3';
+    r'f2a3b4c5d6e1f2a3b4c5d6e1f2a3b4c5d6e1f2a3';
 
 /// See also [recipesList].
 @ProviderFor(recipesList)
@@ -46,7 +46,7 @@ final recipesListProvider =
 typedef RecipesListRef = AutoDisposeFutureProviderRef<List<RecipeSummary>>;
 
 String _$recipeDetailHash() =>
-    r'f3a4b5c6d1e2f3a4b5c6d1e2f3a4b5c6d1e2f3a4';
+    r'a3b4c5d6e1f2a3b4c5d6e1f2a3b4c5d6e1f2a3b4';
 
 /// See also [recipeDetail].
 @ProviderFor(recipeDetail)
@@ -152,6 +152,117 @@ class _RecipeDetailProviderElement
 
   @override
   String get id => (origin as RecipeDetailProvider).id;
+}
+
+String _$recipeRevisionsHash() =>
+    r'b4c5d6e1f2a3b4c5d6e1f2a3b4c5d6e1f2a3b4c5';
+
+/// See also [recipeRevisions].
+@ProviderFor(recipeRevisions)
+const recipeRevisionsProvider = RecipeRevisionsFamily();
+
+/// @macro riverpod_annotation.riverpod_family
+class RecipeRevisionsFamily extends Family {
+  const RecipeRevisionsFamily();
+
+  RecipeRevisionsProvider call(String id) => RecipeRevisionsProvider(id);
+
+  @override
+  RecipeRevisionsProvider getProviderOverride(
+      covariant RecipeRevisionsProvider provider) {
+    return call(provider.id);
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'recipeRevisionsProvider';
+}
+
+class RecipeRevisionsProvider
+    extends AutoDisposeFutureProvider<List<RecipeRevision>> {
+  RecipeRevisionsProvider(String id)
+      : this._internal(
+          (ref) => recipeRevisions(ref as RecipeRevisionsRef, id),
+          from: recipeRevisionsProvider,
+          name: r'recipeRevisionsProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$recipeRevisionsHash,
+          dependencies: null,
+          allTransitiveDependencies: null,
+          id: id,
+        );
+
+  RecipeRevisionsProvider._internal(
+    super.create, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.id,
+  }) : super.internal();
+
+  final String id;
+
+  @override
+  Override overrideWith(
+    FutureOr<List<RecipeRevision>> Function(RecipeRevisionsRef ref) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: RecipeRevisionsProvider._internal(
+        (ref) => create(ref as RecipeRevisionsRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        id: id,
+      ),
+    );
+  }
+
+  @override
+  (String,) get argument => (id,);
+
+  @override
+  AutoDisposeFutureProviderElement<List<RecipeRevision>> createElement() {
+    return _RecipeRevisionsProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is RecipeRevisionsProvider && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
+mixin RecipeRevisionsRef
+    on AutoDisposeFutureProviderRef<List<RecipeRevision>> {
+  String get id;
+}
+
+class _RecipeRevisionsProviderElement
+    extends AutoDisposeFutureProviderElement<List<RecipeRevision>>
+    with RecipeRevisionsRef {
+  _RecipeRevisionsProviderElement(super.provider);
+
+  @override
+  String get id => (origin as RecipeRevisionsProvider).id;
 }
 
 // ignore_for_file: type=lint

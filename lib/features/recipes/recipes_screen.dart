@@ -116,12 +116,15 @@ class _RecipeCard extends StatelessWidget {
   final RecipeSummary recipe;
   final WidgetRef ref;
 
+  Color _statusColor(String s) => switch (s) {
+        'Testing' => Colors.orange,
+        'Tested'  => Colors.green,
+        _         => Colors.transparent,
+      };
+
   @override
   Widget build(BuildContext context) {
-    final subtitle = [
-      if (recipe.cone.isNotEmpty) 'Cone ${recipe.cone}',
-      if (recipe.firingType.isNotEmpty) recipe.firingType,
-    ].join(' · ');
+    final scheme = Theme.of(context).colorScheme;
 
     return Card(
       child: ListTile(
@@ -137,7 +140,39 @@ class _RecipeCard extends StatelessWidget {
             : const _RecipeIcon(),
         title: Text(recipe.name,
             style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
+        subtitle: Wrap(
+          spacing: 6,
+          runSpacing: 2,
+          children: [
+            if (recipe.cone.isNotEmpty)
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.change_history,
+                    size: 12, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 2),
+                Text(recipe.cone,
+                    style: Theme.of(context).textTheme.bodySmall),
+              ]),
+            if (recipe.firingType.isNotEmpty)
+              Text(recipe.firingType,
+                  style: Theme.of(context).textTheme.bodySmall),
+            if (recipe.status != 'New')
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _statusColor(recipe.status).withAlpha(35),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color:
+                          _statusColor(recipe.status).withAlpha(140)),
+                ),
+                child: Text(recipe.status,
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: _statusColor(recipe.status))),
+              ),
+          ],
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

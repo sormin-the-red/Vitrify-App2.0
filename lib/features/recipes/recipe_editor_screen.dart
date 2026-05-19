@@ -1,10 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/materials/materials_repository.dart';
+import '../../core/settings/settings_provider.dart';
 import 'recipe_models.dart';
 import 'recipes_repository.dart';
+
+// Common materials pinned at the top of the picker (in order)
+const _pinnedMaterialNames = [
+  'Silica',
+  'Flint',
+  'Custer Feldspar',
+  'Potash Feldspar',
+  'G-200 Feldspar',
+  'EPK Kaolin',
+  'Kaolin',
+  'Whiting',
+  'Dolomite',
+  'Talc',
+  'Zinc Oxide',
+  'Nepheline Syenite',
+  'Gerstley Borate',
+  'Ferro Frit 3134',
+  'Ferro Frit 3124',
+  'Ferro Frit 3195',
+  'Wollastonite',
+  'Alumina Hydrate',
+  'Spodumene',
+  'Barium Carbonate',
+  'Lithium Carbonate',
+  'Rutile',
+  'Titanium Dioxide',
+  'Strontium Carbonate',
+  'Magnesium Carbonate',
+  'Colemanite',
+];
+final _pinnedSet = _pinnedMaterialNames.toSet();
+
+const _cones = [
+  '022','021','020','019','018','017','016','015','014','013',
+  '012','011','010','09','08','07','06','05','04','03','02','01',
+  '1','2','3','4','5','6','7','8','9','10','11','12','13','14',
+];
+const _firingTypes = [
+  'Oxidation', 'Reduction', 'Neutral', 'Soda', 'Wood', 'Salt',
+];
+
+// Status configuration
+const _statuses = ['New', 'Testing', 'Tested'];
+Color _statusColor(String status, ColorScheme cs) => switch (status) {
+      'Testing' => Colors.orange,
+      'Tested'  => Colors.green,
+      _         => cs.outline,
+    };
 
 class RecipeEditorScreen extends ConsumerStatefulWidget {
   const RecipeEditorScreen({super.key, this.existing});
@@ -15,26 +65,20 @@ class RecipeEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
-  static const _cones = [
-    '022','021','020','019','018','017','016','015','014','013',
-    '012','011','010','09','08','07','06','05','04','03','02','01',
-    '1','2','3','4','5','6','7','8','9','10','11','12','13','14',
-  ];
-  static const _firingTypes = [
-    'Oxidation', 'Reduction', 'Neutral', 'Soda', 'Wood', 'Salt',
-  ];
-
-  final _nameCtrl    = TextEditingController();
-  final _descCtrl    = TextEditingController();
-  final _notesCtrl   = TextEditingController();
-  final _aiDescCtrl  = TextEditingController();
+  final _nameCtrl  = TextEditingController();
+  final _descCtrl  = TextEditingController();
+  final _notesCtrl = TextEditingController();
 
   String? _cone;
   String? _firingType;
-  bool _isPublic  = false;
-  bool _saving    = false;
-  bool _aiLoading = false;
+  bool _isPublic      = false;
+  bool _saving        = false;
+  bool _aiLoading     = false;
+  bool _uploadingImage = false;
+  bool _showAdditions = false;
 
+  String _status = 'New';
+  final List<String> _imageUrls = [];
   final List<_IngredientState> _baseIngredients     = [];
   final List<_IngredientState> _additionIngredients = [];
 
@@ -49,16 +93,16 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         ..._baseIngredients
             .where((s) => s.name.isNotEmpty)
             .map((s) => RecipeIngredient(name: s.name, percentage: s.percentage)),
-        ..._additionIngredients
-            .where((s) => s.name.isNotEmpty)
-            .map((s) =>
-                RecipeIngredient(name: s.name, percentage: s.percentage, isAddition: true)),
+        if (_showAdditions)
+          ..._additionIngredients
+              .where((s) => s.name.isNotEmpty)
+              .map((s) => RecipeIngredient(
+                  name: s.name, percentage: s.percentage, isAddition: true)),
       ];
 
   @override
   void initState() {
     super.initState();
-    // Kick off materials load so it's ready when the picker opens.
     ref.read(materialsProvider.future).ignore();
 
     final e = widget.existing;
@@ -69,6 +113,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       _cone       = e.cone.isEmpty ? null : e.cone;
       _firingType = e.firingType.isEmpty ? null : e.firingType;
       _isPublic   = e.isPublic;
+      _status     = e.revision?.status ?? e.status;
+      _imageUrls.addAll(e.revision?.imageUrls ?? []);
       for (final m in e.revision?.materials ?? []) {
         final s = _IngredientState.fromIngredient(m);
         if (m.isAddition) {
@@ -77,6 +123,17 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           _baseIngredients.add(s);
         }
       }
+      if (_additionIngredients.isNotEmpty) _showAdditions = true;
+    } else {
+      // Read defaults from settings
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final settings = ref.read(settingsNotifierProvider);
+        setState(() {
+          _cone       = settings.defaultCone;
+          _firingType = settings.defaultFiringType;
+        });
+      });
     }
   }
 
@@ -85,11 +142,110 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     _nameCtrl.dispose();
     _descCtrl.dispose();
     _notesCtrl.dispose();
-    _aiDescCtrl.dispose();
     for (final s in _baseIngredients)     s.dispose();
     for (final s in _additionIngredients) s.dispose();
     super.dispose();
   }
+
+  // ── AI generate ─────────────────────────────────────────────────────────────
+
+  Future<void> _generateAi() async {
+    final name = _nameCtrl.text.trim();
+    final desc = _descCtrl.text.trim();
+    if (name.isEmpty && desc.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Enter a name or description first')));
+      return;
+    }
+    final prompt = desc.isNotEmpty ? '$name $desc'.trim() : name;
+    setState(() => _aiLoading = true);
+    try {
+      final generated = await ref
+          .read(recipesRepositoryProvider)
+          .generateAiRecipe(
+            description: prompt,
+            cone: _cone,
+            firingType: _firingType,
+          );
+      setState(() {
+        for (final s in _baseIngredients)     s.dispose();
+        for (final s in _additionIngredients) s.dispose();
+        _baseIngredients.clear();
+        _additionIngredients.clear();
+        for (final m in generated) {
+          final s = _IngredientState.fromIngredient(m);
+          if (m.isAddition) {
+            _additionIngredients.add(s);
+          } else {
+            _baseIngredients.add(s);
+          }
+        }
+        if (_additionIngredients.isNotEmpty) _showAdditions = true;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$e'), duration: const Duration(seconds: 4)));
+      }
+    } finally {
+      if (mounted) setState(() => _aiLoading = false);
+    }
+  }
+
+  // ── Photo picker ─────────────────────────────────────────────────────────────
+
+  Future<void> _pickImage(ImageSource source) async {
+    if (_imageUrls.length >= 5) return;
+    final picker = ImagePicker();
+    final xfile = await picker.pickImage(source: source, imageQuality: 80);
+    if (xfile == null || !mounted) return;
+    setState(() => _uploadingImage = true);
+    try {
+      final bytes = await xfile.readAsBytes();
+      final url = await ref
+          .read(recipesRepositoryProvider)
+          .uploadImage(bytes, 'image/jpeg');
+      if (mounted) setState(() => _imageUrls.add(url));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingImage = false);
+    }
+  }
+
+  void _showImageSourceSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photo library'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Ingredient picker ─────────────────────────────────────────────────────────
 
   Future<void> _showPicker({required bool isAddition}) async {
     final result = await showModalBottomSheet<_PickerResult>(
@@ -97,16 +253,13 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (_) => const _MaterialPickerSheet(),
     );
     if (result == null || !mounted) return;
     setState(() {
       final s = _IngredientState(
-        name: result.name,
-        pct: result.percentage.toStringAsFixed(1),
-      );
+          name: result.name, pct: result.percentage.toStringAsFixed(1));
       if (isAddition) {
         _additionIngredients.add(s);
       } else {
@@ -115,16 +268,143 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     });
   }
 
+  void _promoteToBase(int index) {
+    setState(() {
+      final s = _additionIngredients.removeAt(index);
+      _baseIngredients.add(s);
+      if (_additionIngredients.isEmpty) _showAdditions = false;
+    });
+  }
+
+  // ── Save ─────────────────────────────────────────────────────────────────────
+
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Name is required')));
+      return;
+    }
+
+    // Warn if base total is less than 100%
+    if (_totalPct < 99.5 && _baseIngredients.isNotEmpty) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Recipe total is under 100%'),
+          content: Text(
+              'Base ingredients total ${_totalPct.toStringAsFixed(1)}%. '
+              'Most glazes should total 100%. Save anyway?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Keep editing')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save anyway')),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
+
+    // Warn if additions are hidden but non-empty
+    if (!_showAdditions && _additionIngredients.isNotEmpty) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Additions are hidden'),
+          content: const Text(
+              'The additions section is off — those ingredients will not be saved. Continue?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save without additions')),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final repo      = ref.read(recipesRepositoryProvider);
+      final materials = _builtIngredients;
+      if (_isEdit) {
+        await repo.updateRecipe(
+          widget.existing!.id,
+          name: name,
+          description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+          cone: _cone,
+          firingType: _firingType,
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          isPublic: _isPublic,
+          materials: materials,
+          imageUrls: _imageUrls,
+          status: _status,
+        );
+        ref.invalidate(recipeDetailProvider(widget.existing!.id));
+        ref.invalidate(recipesListProvider);
+        if (mounted) context.pop();
+      } else {
+        final id = await repo.createRecipe(
+          name: name,
+          description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+          cone: _cone,
+          firingType: _firingType,
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          isPublic: _isPublic,
+          materials: materials,
+          imageUrls: _imageUrls,
+          status: _status,
+        );
+        ref.invalidate(recipesListProvider);
+        if (mounted) context.pushReplacement('/recipe/$id');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final totalPct = _totalPct;
-    final pctColor =
-        (totalPct - 100).abs() < 0.5 ? Colors.green : Colors.orange;
+    final over     = totalPct > 100.5;
+    final scheme   = Theme.of(context).colorScheme;
+    final pctColor = over
+        ? scheme.error
+        : (totalPct - 100).abs() < 0.5
+            ? Colors.green
+            : Colors.orange;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEdit ? 'Edit Recipe' : 'New Recipe'),
         actions: [
+          if (_aiLoading)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            IconButton(
+              tooltip: 'Generate with AI',
+              icon: const Icon(Icons.auto_awesome_outlined),
+              onPressed: _generateAi,
+            ),
           if (_saving)
             const Padding(
               padding: EdgeInsets.all(12),
@@ -140,7 +420,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
-          // ── Basic info ────────────────────────────────────────────────────
+          // ── Basic info ─────────────────────────────────────────────────────
           TextField(
             controller: _nameCtrl,
             decoration: const InputDecoration(
@@ -159,12 +439,18 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           Row(children: [
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: _cone,
+                value: _cones.contains(_cone) ? _cone : null,
                 hint: const Text('Cone'),
-                decoration: const InputDecoration(border: OutlineInputBorder()),
+                decoration:
+                    const InputDecoration(border: OutlineInputBorder()),
                 items: _cones
-                    .map((c) =>
-                        DropdownMenuItem(value: c, child: Text('Cone $c')))
+                    .map((c) => DropdownMenuItem(
+                        value: c,
+                        child: Row(children: [
+                          const Icon(Icons.change_history, size: 14),
+                          const SizedBox(width: 4),
+                          Text(c),
+                        ])))
                     .toList(),
                 onChanged: (v) => setState(() => _cone = v),
               ),
@@ -172,17 +458,43 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: _firingType,
+                value: _firingTypes.contains(_firingType) ? _firingType : null,
                 hint: const Text('Firing type'),
-                decoration: const InputDecoration(border: OutlineInputBorder()),
+                decoration:
+                    const InputDecoration(border: OutlineInputBorder()),
                 items: _firingTypes
-                    .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                    .map((f) =>
+                        DropdownMenuItem(value: f, child: Text(f)))
                     .toList(),
                 onChanged: (v) => setState(() => _firingType = v),
               ),
             ),
           ]),
           const SizedBox(height: 12),
+
+          // Status
+          Row(children: [
+            Text('Status', style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(width: 12),
+            ..._statuses.map((s) {
+              final selected = _status == s;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(s),
+                  selected: selected,
+                  selectedColor: _statusColor(s, scheme).withAlpha(60),
+                  side: BorderSide(
+                      color: selected
+                          ? _statusColor(s, scheme)
+                          : scheme.outlineVariant),
+                  onSelected: (_) => setState(() => _status = s),
+                ),
+              );
+            }),
+          ]),
+          const SizedBox(height: 8),
+
           SwitchListTile(
             title: const Text('Share publicly'),
             subtitle: const Text('Visible to the community'),
@@ -191,47 +503,34 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             contentPadding: EdgeInsets.zero,
           ),
 
-          const SizedBox(height: 20),
-          const Divider(),
-          const SizedBox(height: 12),
-
-          // ── AI generate ───────────────────────────────────────────────────
-          Text('AI Recipe Generator',
-              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _aiDescCtrl,
-                decoration: const InputDecoration(
-                  hintText: 'Describe the glaze you want...',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                textCapitalization: TextCapitalization.sentences,
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.tonal(
-              onPressed: _aiLoading ? null : _generateAi,
-              child: _aiLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Generate'),
-            ),
-          ]),
-
-          const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 12),
 
-          // ── Base ingredients ──────────────────────────────────────────────
+          // ── Photos ────────────────────────────────────────────────────────
+          _PhotoSection(
+            urls: _imageUrls,
+            uploading: _uploadingImage,
+            onAdd: _imageUrls.length < 5 ? _showImageSourceSheet : null,
+            onRemove: (i) => setState(() => _imageUrls.removeAt(i)),
+          ),
+
+          const SizedBox(height: 8),
+          const Divider(),
+          const SizedBox(height: 12),
+
+          // ── Base ingredients ───────────────────────────────────────────────
           Row(children: [
             Text('Ingredients',
                 style: Theme.of(context).textTheme.titleMedium),
             const Spacer(),
+            if (over)
+              Tooltip(
+                message: 'Total exceeds 100%',
+                child: Icon(Icons.warning_amber_rounded,
+                    size: 18, color: scheme.error),
+              ),
+            const SizedBox(width: 4),
             Text(
               '${totalPct.toStringAsFixed(1)}%',
               style: TextStyle(color: pctColor, fontWeight: FontWeight.bold),
@@ -275,32 +574,39 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               },
             ),
 
-          // ── Additions ─────────────────────────────────────────────────────
+          // ── Additions ──────────────────────────────────────────────────────
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
-                child: Divider(
-                    color: Theme.of(context).colorScheme.outlineVariant)),
+                child: Divider(color: scheme.outlineVariant)),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
-                _additionIngredients.isEmpty
-                    ? 'Additions'
-                    : 'Additions  ${_additionsPct.toStringAsFixed(1)}%',
+                _showAdditions && _additionIngredients.isNotEmpty
+                    ? 'Additions  ${_additionsPct.toStringAsFixed(1)}%'
+                    : 'Additions',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    color: scheme.onSurfaceVariant),
               ),
             ),
-            Expanded(
-                child: Divider(
-                    color: Theme.of(context).colorScheme.outlineVariant)),
-            TextButton.icon(
-              onPressed: () => _showPicker(isAddition: true),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add'),
+            Expanded(child: Divider(color: scheme.outlineVariant)),
+            IconButton(
+              icon: Icon(
+                  _showAdditions ? Icons.expand_less : Icons.expand_more,
+                  size: 20),
+              tooltip: _showAdditions ? 'Hide additions' : 'Show additions',
+              onPressed: () =>
+                  setState(() => _showAdditions = !_showAdditions),
+              visualDensity: VisualDensity.compact,
             ),
+            if (_showAdditions)
+              TextButton.icon(
+                onPressed: () => _showPicker(isAddition: true),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add'),
+              ),
           ]),
-          if (_additionIngredients.isNotEmpty)
+          if (_showAdditions && _additionIngredients.isNotEmpty)
             ReorderableListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -322,8 +628,15 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   onRemove: () =>
                       setState(() => _additionIngredients.removeAt(index)),
                   onChanged: () => setState(() {}),
+                  onPromote: () => _promoteToBase(index),
                 );
               },
+            ),
+          if (_showAdditions && _additionIngredients.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text('No additions yet.',
+                  style: TextStyle(color: Colors.grey.shade500)),
             ),
 
           const SizedBox(height: 20),
@@ -342,90 +655,88 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
       ),
     );
   }
+}
 
-  Future<void> _generateAi() async {
-    final desc = _aiDescCtrl.text.trim();
-    if (desc.isEmpty) return;
-    setState(() => _aiLoading = true);
-    try {
-      final generated = await ref.read(recipesRepositoryProvider).generateAiRecipe(
-            description: desc,
-            cone: _cone,
-            firingType: _firingType,
-          );
-      setState(() {
-        for (final s in _baseIngredients)     s.dispose();
-        for (final s in _additionIngredients) s.dispose();
-        _baseIngredients.clear();
-        _additionIngredients.clear();
-        for (final m in generated) {
-          final s = _IngredientState.fromIngredient(m);
-          if (m.isAddition) {
-            _additionIngredients.add(s);
-          } else {
-            _baseIngredients.add(s);
-          }
-        }
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), duration: const Duration(seconds: 4)),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _aiLoading = false);
-    }
-  }
+// ── Photo section ─────────────────────────────────────────────────────────────
 
-  Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Name is required')));
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      final repo      = ref.read(recipesRepositoryProvider);
-      final materials = _builtIngredients;
-      if (_isEdit) {
-        await repo.updateRecipe(
-          widget.existing!.id,
-          name: name,
-          description:
-              _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-          cone: _cone,
-          firingType: _firingType,
-          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-          isPublic: _isPublic,
-          materials: materials,
-        );
-        ref.invalidate(recipeDetailProvider(widget.existing!.id));
-        ref.invalidate(recipesListProvider);
-        if (mounted) context.pop();
-      } else {
-        final id = await repo.createRecipe(
-          name: name,
-          description:
-              _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-          cone: _cone,
-          firingType: _firingType,
-          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-          isPublic: _isPublic,
-          materials: materials,
-        );
-        ref.invalidate(recipesListProvider);
-        if (mounted) context.pushReplacement('/recipe/$id');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+class _PhotoSection extends StatelessWidget {
+  const _PhotoSection({
+    required this.urls,
+    required this.uploading,
+    required this.onAdd,
+    required this.onRemove,
+  });
+  final List<String> urls;
+  final bool uploading;
+  final VoidCallback? onAdd;
+  final void Function(int index) onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Text('Photos', style: Theme.of(context).textTheme.titleMedium),
+          const Spacer(),
+          if (uploading)
+            const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2))
+          else if (onAdd != null)
+            TextButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+              label: Text('Add (${urls.length}/5)'),
+            )
+          else
+            Text('5/5',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+        ]),
+        if (urls.isNotEmpty)
+          SizedBox(
+            height: 90,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: urls.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, i) => Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(urls[i],
+                        width: 90,
+                        height: 90,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Container(
+                            width: 90,
+                            height: 90,
+                            color: Colors.grey.shade200,
+                            child: const Icon(Icons.broken_image_outlined))),
+                  ),
+                  Positioned(
+                    top: 2,
+                    right: 2,
+                    child: GestureDetector(
+                      onTap: () => onRemove(i),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(2),
+                        child: const Icon(Icons.close,
+                            size: 14, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 
@@ -466,11 +777,13 @@ class _IngredientRow extends StatelessWidget {
     required this.state,
     required this.onRemove,
     required this.onChanged,
+    this.onPromote,
   });
   final int index;
   final _IngredientState state;
   final VoidCallback onRemove;
   final VoidCallback onChanged;
+  final VoidCallback? onPromote;
 
   @override
   Widget build(BuildContext context) {
@@ -517,6 +830,14 @@ class _IngredientRow extends StatelessWidget {
               onChanged: (_) => onChanged(),
             ),
           ),
+          if (onPromote != null)
+            IconButton(
+              icon: const Icon(Icons.arrow_upward, size: 18),
+              tooltip: 'Move to base',
+              onPressed: onPromote,
+              visualDensity: VisualDensity.compact,
+              color: Colors.grey,
+            ),
           IconButton(
             icon: const Icon(Icons.delete_outline, size: 20),
             onPressed: onRemove,
@@ -569,26 +890,21 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Drag handle
           Center(
             child: Container(
               margin: const EdgeInsets.symmetric(vertical: 10),
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: scheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2)),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Text('Add Ingredient',
                 style: Theme.of(context).textTheme.titleMedium),
           ),
-
-          // Search field
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(
@@ -612,8 +928,6 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
               onChanged: (v) => setState(() => _query = v.toLowerCase()),
             ),
           ),
-
-          // Materials list
           SizedBox(
             height: 280,
             child: materialsAsync.when(
@@ -623,20 +937,30 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
                 onChanged: (name) => setState(() => _selected = name),
               ),
               data: (materials) {
+                // Sort: pinned first (in order), then alphabetical
+                final pinned = <dynamic>[];
+                for (final name in _pinnedMaterialNames) {
+                  final found = materials.where((m) => m.name == name).firstOrNull;
+                  if (found != null) pinned.add(found);
+                }
+                final rest = materials
+                    .where((m) => !_pinnedSet.contains(m.name))
+                    .toList()
+                  ..sort((a, b) => a.name.compareTo(b.name));
+                final sorted = [...pinned, ...rest];
+
                 final filtered = _query.isEmpty
-                    ? materials
-                    : materials
+                    ? sorted
+                    : sorted
                         .where((m) =>
                             m.name.toLowerCase().contains(_query))
                         .toList();
 
                 if (filtered.isEmpty) {
                   return Center(
-                    child: Text(
-                      'No results for "$_query"',
-                      style:
-                          TextStyle(color: scheme.onSurfaceVariant),
-                    ),
+                    child: Text('No results for "$_query"',
+                        style:
+                            TextStyle(color: scheme.onSurfaceVariant)),
                   );
                 }
 
@@ -645,32 +969,31 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
                   itemBuilder: (context, i) {
                     final m = filtered[i];
                     final isSelected = _selected == m.name;
+                    final isPinned   = _pinnedSet.contains(m.name);
                     return ListTile(
                       title: Text(m.name),
                       subtitle: m.description.isNotEmpty
-                          ? Text(
-                              m.description,
+                          ? Text(m.description,
                               maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            )
+                              overflow: TextOverflow.ellipsis)
                           : null,
                       selected: isSelected,
                       selectedTileColor:
                           scheme.primaryContainer.withAlpha(80),
+                      leading: isPinned && _query.isEmpty
+                          ? Icon(Icons.star_outline,
+                              size: 14,
+                              color: scheme.primary.withAlpha(160))
+                          : null,
                       trailing: m.hazardous
                           ? Tooltip(
                               message: 'Hazardous material',
-                              child: Icon(
-                                Icons.warning_amber_outlined,
-                                size: 16,
-                                color: scheme.error,
-                              ),
-                            )
+                              child: Icon(Icons.warning_amber_outlined,
+                                  size: 16, color: scheme.error))
                           : null,
                       dense: true,
                       onTap: () => setState(() {
                         _selected = m.name;
-                        // Auto-focus amount field after selection
                         FocusScope.of(context).nextFocus();
                       }),
                     );
@@ -679,25 +1002,20 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
               },
             ),
           ),
-
           const Divider(height: 1),
-
-          // Bottom row: selected name + amount + Add
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: Row(
               children: [
                 Expanded(
                   child: _selected != null
-                      ? Text(
-                          _selected!,
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                          overflow: TextOverflow.ellipsis,
-                        )
-                      : Text(
-                          'Select a material above',
-                          style: TextStyle(color: scheme.onSurfaceVariant),
-                        ),
+                      ? Text(_selected!,
+                          style:
+                              const TextStyle(fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis)
+                      : Text('Select a material above',
+                          style:
+                              TextStyle(color: scheme.onSurfaceVariant)),
                 ),
                 const SizedBox(width: 12),
                 SizedBox(
@@ -738,7 +1056,7 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
   }
 }
 
-// ── Manual entry fallback (when materials CDN is unreachable) ─────────────────
+// ── Manual entry fallback ─────────────────────────────────────────────────────
 
 class _ManualEntryFallback extends StatefulWidget {
   const _ManualEntryFallback({required this.onChanged});

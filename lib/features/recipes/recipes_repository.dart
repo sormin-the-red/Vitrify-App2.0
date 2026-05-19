@@ -15,7 +15,9 @@ class RecipesRepository {
     final res = await _api.get('/recipes');
     if (res.statusCode != 200) throw Exception('Failed to load recipes');
     final body = jsonDecode(res.body);
-    final list = body is List ? body : (body as Map<String, dynamic>)['recipes'] as List? ?? [];
+    final list = body is List
+        ? body
+        : (body as Map<String, dynamic>)['recipes'] as List? ?? [];
     return list
         .whereType<Map<String, dynamic>>()
         .map(RecipeSummary.fromJson)
@@ -25,7 +27,21 @@ class RecipesRepository {
   Future<RecipeDetail> getRecipe(String id) async {
     final res = await _api.get('/recipes/$id');
     if (res.statusCode != 200) throw Exception('Failed to load recipe');
-    return RecipeDetail.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+    return RecipeDetail.fromJson(
+        jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<List<RecipeRevision>> listRevisions(String id) async {
+    final res = await _api.get('/recipes/$id/revisions');
+    if (res.statusCode != 200) throw Exception('Failed to load revisions');
+    final body = jsonDecode(res.body);
+    final list = body is List
+        ? body
+        : (body as Map<String, dynamic>)['revisions'] as List? ?? [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(RecipeRevision.fromJson)
+        .toList();
   }
 
   Future<String> createRecipe({
@@ -36,6 +52,8 @@ class RecipesRepository {
     String? notes,
     bool isPublic = false,
     List<RecipeIngredient> materials = const [],
+    List<String> imageUrls = const [],
+    String status = 'New',
   }) async {
     final res = await _api.post('/recipes', body: {
       'name': name,
@@ -46,14 +64,16 @@ class RecipesRepository {
       'public': isPublic,
       'revision': {
         'materials': materials.map((m) => m.toJson()).toList(),
-        'status': 'New',
+        'imageUrls': imageUrls,
+        'status': status,
       },
     });
     if (res.statusCode != 201) throw Exception('Failed to create recipe');
     return (jsonDecode(res.body) as Map<String, dynamic>)['id'] as String;
   }
 
-  Future<void> updateRecipe(String id, {
+  Future<void> updateRecipe(
+    String id, {
     required String name,
     String? description,
     String? cone,
@@ -61,7 +81,8 @@ class RecipesRepository {
     String? notes,
     bool isPublic = false,
     required List<RecipeIngredient> materials,
-    String status = 'InProgress',
+    List<String> imageUrls = const [],
+    String status = 'New',
   }) async {
     final res = await _api.put('/recipes/$id', body: {
       'name': name,
@@ -72,6 +93,7 @@ class RecipesRepository {
       'public': isPublic,
       'revision': {
         'materials': materials.map((m) => m.toJson()).toList(),
+        'imageUrls': imageUrls,
         'status': status,
       },
     });
@@ -104,6 +126,15 @@ class RecipesRepository {
         .map(RecipeIngredient.fromJson)
         .toList();
   }
+
+  Future<String> uploadImage(List<int> bytes, String mimeType) async {
+    final res = await _api.uploadBytes('/images', bytes, mimeType);
+    if (res.statusCode != 200) {
+      throw Exception('Image upload failed (${res.statusCode})');
+    }
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    return body['url'] as String;
+  }
 }
 
 @Riverpod(keepAlive: true)
@@ -117,3 +148,8 @@ Future<List<RecipeSummary>> recipesList(RecipesListRef ref) =>
 @riverpod
 Future<RecipeDetail> recipeDetail(RecipeDetailRef ref, String id) =>
     ref.watch(recipesRepositoryProvider).getRecipe(id);
+
+@riverpod
+Future<List<RecipeRevision>> recipeRevisions(
+        RecipeRevisionsRef ref, String id) =>
+    ref.watch(recipesRepositoryProvider).listRevisions(id);

@@ -30,6 +30,16 @@ class ApiClient {
     return http.delete(_uri(path), headers: await _headers());
   }
 
+  Future<http.Response> uploadBytes(
+      String path, List<int> bytes, String contentType) async {
+    final token = await _idToken();
+    return http.post(
+      _uri(path),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': contentType},
+      body: bytes,
+    );
+  }
+
   Uri _uri(String path) => Uri.parse('$_baseUrl$path');
 
   Future<Map<String, String>> _headers() async {

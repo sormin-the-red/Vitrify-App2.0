@@ -11,7 +11,8 @@ class RecipeIngredient {
 
   factory RecipeIngredient.fromJson(Map<String, dynamic> j) => RecipeIngredient(
         name: (j['name'] ?? j['Name'] ?? '') as String,
-        percentage: ((j['percentage'] ?? j['Percentage'] ?? 0) as num).toDouble(),
+        percentage:
+            ((j['percentage'] ?? j['Percentage'] ?? 0) as num).toDouble(),
         isAddition: j['isAddition'] as bool? ?? false,
       );
 
@@ -62,6 +63,7 @@ class RecipeSummary {
   final int likeCount;
   final int revisionCount;
   final String imageUrl;
+  final String status;
   final String dateCreated;
   final String dateModified;
 
@@ -75,6 +77,7 @@ class RecipeSummary {
     required this.likeCount,
     required this.revisionCount,
     required this.imageUrl,
+    required this.status,
     required this.dateCreated,
     required this.dateModified,
   });
@@ -89,6 +92,7 @@ class RecipeSummary {
         likeCount: (j['likeCount'] as num?)?.toInt() ?? 0,
         revisionCount: (j['revisionCount'] as num?)?.toInt() ?? 1,
         imageUrl: j['imageUrl'] as String? ?? '',
+        status: j['status'] as String? ?? 'New',
         dateCreated: j['dateCreated'] as String? ?? '',
         dateModified: j['dateModified'] as String? ?? '',
       );
@@ -98,6 +102,7 @@ class RecipeDetail extends RecipeSummary {
   final String description;
   final String notes;
   final RecipeRevision? revision;
+  final List<RecipeRevision> revisions;
 
   const RecipeDetail({
     required super.id,
@@ -109,11 +114,13 @@ class RecipeDetail extends RecipeSummary {
     required super.likeCount,
     required super.revisionCount,
     required super.imageUrl,
+    required super.status,
     required super.dateCreated,
     required super.dateModified,
     required this.description,
     required this.notes,
     this.revision,
+    this.revisions = const [],
   });
 
   factory RecipeDetail.fromJson(Map<String, dynamic> j) => RecipeDetail(
@@ -126,6 +133,7 @@ class RecipeDetail extends RecipeSummary {
         likeCount: (j['likeCount'] as num?)?.toInt() ?? 0,
         revisionCount: (j['revisionCount'] as num?)?.toInt() ?? 1,
         imageUrl: j['imageUrl'] as String? ?? '',
+        status: j['status'] as String? ?? 'New',
         dateCreated: j['dateCreated'] as String? ?? '',
         dateModified: j['dateModified'] as String? ?? '',
         description: j['description'] as String? ?? '',
@@ -133,5 +141,9 @@ class RecipeDetail extends RecipeSummary {
         revision: j['revision'] != null
             ? RecipeRevision.fromJson(j['revision'] as Map<String, dynamic>)
             : null,
+        revisions: (j['revisions'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(RecipeRevision.fromJson)
+            .toList(),
       );
 }
