@@ -14,12 +14,16 @@ class AppSettings {
   final String startupTab;
   final String defaultCone;
   final String defaultFiringType;
+  final String defaultApplicationMethod;
+  final String defaultAtmosphere;
 
   const AppSettings({
     required this.themeMode,
     required this.startupTab,
     required this.defaultCone,
     required this.defaultFiringType,
+    required this.defaultApplicationMethod,
+    required this.defaultAtmosphere,
   });
 
   AppSettings copyWith({
@@ -27,21 +31,28 @@ class AppSettings {
     String? startupTab,
     String? defaultCone,
     String? defaultFiringType,
+    String? defaultApplicationMethod,
+    String? defaultAtmosphere,
   }) =>
       AppSettings(
         themeMode: themeMode ?? this.themeMode,
         startupTab: startupTab ?? this.startupTab,
         defaultCone: defaultCone ?? this.defaultCone,
         defaultFiringType: defaultFiringType ?? this.defaultFiringType,
+        defaultApplicationMethod:
+            defaultApplicationMethod ?? this.defaultApplicationMethod,
+        defaultAtmosphere: defaultAtmosphere ?? this.defaultAtmosphere,
       );
 }
 
 @Riverpod(keepAlive: true)
 class SettingsNotifier extends _$SettingsNotifier {
-  static const _themeModeKey     = 'settings_theme_mode';
-  static const _startupTabKey    = 'settings_startup_tab';
-  static const _defaultConeKey   = 'settings_default_cone';
-  static const _defaultFiringKey = 'settings_default_firing_type';
+  static const _themeModeKey              = 'settings_theme_mode';
+  static const _startupTabKey             = 'settings_startup_tab';
+  static const _defaultConeKey            = 'settings_default_cone';
+  static const _defaultFiringKey          = 'settings_default_firing_type';
+  static const _defaultApplicationMethod  = 'settings_default_application_method';
+  static const _defaultAtmosphereKey      = 'settings_default_atmosphere';
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
@@ -54,6 +65,9 @@ class SettingsNotifier extends _$SettingsNotifier {
       startupTab: prefs.getString(_startupTabKey) ?? '/feed',
       defaultCone: prefs.getString(_defaultConeKey) ?? '6',
       defaultFiringType: prefs.getString(_defaultFiringKey) ?? 'Oxidation',
+      defaultApplicationMethod:
+          prefs.getString(_defaultApplicationMethod) ?? 'Dip',
+      defaultAtmosphere: prefs.getString(_defaultAtmosphereKey) ?? '',
     );
   }
 
@@ -74,6 +88,16 @@ class SettingsNotifier extends _$SettingsNotifier {
 
   Future<void> setDefaultFiringType(String type) async {
     await _prefs.setString(_defaultFiringKey, type);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setDefaultApplicationMethod(String method) async {
+    await _prefs.setString(_defaultApplicationMethod, method);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setDefaultAtmosphere(String atmosphere) async {
+    await _prefs.setString(_defaultAtmosphereKey, atmosphere);
     ref.invalidateSelf();
   }
 }

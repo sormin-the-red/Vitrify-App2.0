@@ -123,6 +123,16 @@ class RecipeDetail extends RecipeSummary {
     this.revisions = const [],
   });
 
+  RecipeDetail copyWith({RecipeRevision? revision}) => RecipeDetail(
+        id: id, uid: uid, name: name, cone: cone, firingType: firingType,
+        isPublic: isPublic, likeCount: likeCount, revisionCount: revisionCount,
+        imageUrl: imageUrl, status: status,
+        dateCreated: dateCreated, dateModified: dateModified,
+        description: description, notes: notes,
+        revision: revision ?? this.revision,
+        revisions: revisions,
+      );
+
   factory RecipeDetail.fromJson(Map<String, dynamic> j) => RecipeDetail(
         id: j['id'] as String? ?? '',
         uid: j['uid'] as String? ?? '',

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/chemistry/umf_calculator.dart';
 import '../../core/materials/materials_repository.dart';
 import '../../core/settings/settings_provider.dart';
 import 'recipe_models.dart';
@@ -84,10 +85,22 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
   bool get _isEdit => widget.existing != null;
 
+  bool get _isEditingLatest {
+    if (!_isEdit) return true;
+    final rev = widget.existing!.revision;
+    if (rev == null) return true;
+    return rev.revisionNum >= widget.existing!.revisionCount;
+  }
+
   double get _totalPct =>
       _baseIngredients.fold(0.0, (s, i) => s + i.percentage);
   double get _additionsPct =>
       _additionIngredients.fold(0.0, (s, i) => s + i.percentage);
+
+  List<RecipeIngredient> get _baseRecipeIngredients => _baseIngredients
+      .where((s) => s.name.isNotEmpty && s.percentage > 0)
+      .map((s) => RecipeIngredient(name: s.name, percentage: s.percentage))
+      .toList();
 
   List<RecipeIngredient> get _builtIngredients => [
         ..._baseIngredients
@@ -333,37 +346,59 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     try {
       final repo      = ref.read(recipesRepositoryProvider);
       final materials = _builtIngredients;
+      final desc  = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
+      final notes = _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
       if (_isEdit) {
-        await repo.updateRecipe(
-          widget.existing!.id,
-          name: name,
-          description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-          cone: _cone,
-          firingType: _firingType,
-          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-          isPublic: _isPublic,
-          materials: materials,
-          imageUrls: _imageUrls,
-          status: _status,
-        );
-        ref.invalidate(recipeDetailProvider(widget.existing!.id));
+        final id     = widget.existing!.id;
+        final revNum = widget.existing!.revision?.revisionNum
+            ?? widget.existing!.revisionCount;
+        await repo.updateRevision(id, revNum,
+            name: name, description: desc, cone: _cone,
+            firingType: _firingType, notes: notes, isPublic: _isPublic,
+            materials: materials, imageUrls: _imageUrls, status: _status);
+        ref.invalidate(recipeDetailProvider(id));
+        ref.invalidate(recipeRevisionsProvider(id));
         ref.invalidate(recipesListProvider);
         if (mounted) context.pop();
       } else {
         final id = await repo.createRecipe(
-          name: name,
-          description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-          cone: _cone,
-          firingType: _firingType,
-          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-          isPublic: _isPublic,
-          materials: materials,
-          imageUrls: _imageUrls,
-          status: _status,
+          name: name, description: desc, cone: _cone,
+          firingType: _firingType, notes: notes, isPublic: _isPublic,
+          materials: materials, imageUrls: _imageUrls, status: _status,
         );
         ref.invalidate(recipesListProvider);
         if (mounted) context.pushReplacement('/recipe/$id');
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveAsNewRevision() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Name is required')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final id       = widget.existing!.id;
+      final desc     = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
+      final notes    = _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
+      await ref.read(recipesRepositoryProvider).createRevision(id,
+          name: name, description: desc, cone: _cone,
+          firingType: _firingType, notes: notes, isPublic: _isPublic,
+          materials: _builtIngredients, imageUrls: _imageUrls, status: _status);
+      ref.invalidate(recipeDetailProvider(id));
+      ref.invalidate(recipeRevisionsProvider(id));
+      ref.invalidate(recipesListProvider);
+      if (mounted) context.pop();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -389,7 +424,9 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEdit ? 'Edit Recipe' : 'New Recipe'),
+        title: Text(_isEdit
+            ? 'Edit Recipe${widget.existing?.revision != null ? "  ·  v${widget.existing!.revision!.revisionNum}" : ""}'
+            : 'New Recipe'),
         actions: [
           if (_aiLoading)
             const Padding(
@@ -413,8 +450,28 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2)),
             )
-          else
+          else ...[
             TextButton(onPressed: _save, child: const Text('Save')),
+            if (_isEdit)
+              PopupMenuButton<_RecipeEditorAction>(
+                onSelected: (action) {
+                  if (action == _RecipeEditorAction.newRevision) {
+                    _saveAsNewRevision();
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: _RecipeEditorAction.newRevision,
+                    child: ListTile(
+                      leading: Icon(Icons.fork_right_outlined),
+                      title: Text('Save as New Revision'),
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+          ],
         ],
       ),
       body: ListView(
@@ -638,6 +695,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               child: Text('No additions yet.',
                   style: TextStyle(color: Colors.grey.shade500)),
             ),
+
+          // ── UMF preview ────────────────────────────────────────────────────
+          if (_baseRecipeIngredients.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _UmfPreviewStrip(ingredients: _baseRecipeIngredients),
+          ],
 
           const SizedBox(height: 20),
           const Divider(),
@@ -1057,6 +1120,171 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
   }
 }
 
+// ── UMF preview strip ─────────────────────────────────────────────────────────
+
+class _UmfPreviewStrip extends ConsumerStatefulWidget {
+  const _UmfPreviewStrip({required this.ingredients});
+  final List<RecipeIngredient> ingredients;
+
+  @override
+  ConsumerState<_UmfPreviewStrip> createState() => _UmfPreviewStripState();
+}
+
+class _UmfPreviewStripState extends ConsumerState<_UmfPreviewStrip> {
+  bool _showSuggestions = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final materialsAsync = ref.watch(materialsProvider);
+
+    return materialsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (materials) {
+        final umf = calculateUmf(widget.ingredients, materials);
+        if (umf == null) return const SizedBox.shrink();
+
+        final zone = umfZone(umf);
+        final suggestions = glazeSuggestions(umf);
+
+        final (zoneLabel, zoneColor) = switch (zone) {
+          GlazeZone.underfired => ('Underfired', Colors.red),
+          GlazeZone.running    => ('Running',    Colors.blue),
+          GlazeZone.matte      => ('Matte',      Colors.orange),
+          GlazeZone.glossy     => ('Glossy',     Colors.green),
+        };
+
+        return Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Text('UMF Preview',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: zoneColor.withAlpha(40),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: zoneColor.withAlpha(120)),
+                    ),
+                    child: Text(zoneLabel,
+                        style: TextStyle(fontSize: 12, color: zoneColor)),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  _UmfValue('Si', umf.si),
+                  const SizedBox(width: 20),
+                  _UmfValue('Al', umf.al),
+                  if (umf.b > 0) ...[
+                    const SizedBox(width: 20),
+                    _UmfValue('B', umf.b),
+                  ],
+                  const Spacer(),
+                  Text('Si:Al ${umf.siAl.toStringAsFixed(1)}',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ]),
+                if (suggestions.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: () =>
+                        setState(() => _showSuggestions = !_showSuggestions),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(children: [
+                        Icon(Icons.tips_and_updates_outlined,
+                            size: 14, color: Colors.amber.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${suggestions.length} suggestion${suggestions.length == 1 ? '' : 's'}',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.amber.shade700),
+                        ),
+                        const Spacer(),
+                        Icon(
+                            _showSuggestions
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            size: 16,
+                            color: scheme.onSurfaceVariant),
+                      ]),
+                    ),
+                  ),
+                  if (_showSuggestions) ...[
+                    const SizedBox(height: 8),
+                    ...suggestions.map((s) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                s.isWarning
+                                    ? Icons.warning_amber_outlined
+                                    : Icons.arrow_right,
+                                size: 16,
+                                color: s.isWarning
+                                    ? scheme.error
+                                    : scheme.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(s.message,
+                                        style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500)),
+                                    if (s.detail.isNotEmpty)
+                                      Text(s.detail,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color:
+                                                  scheme.onSurfaceVariant)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _UmfValue extends StatelessWidget {
+  const _UmfValue(this.label, this.value);
+  final String label;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(value.toStringAsFixed(2),
+            style:
+                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+  }
+}
+
 // ── Manual entry fallback ─────────────────────────────────────────────────────
 
 class _ManualEntryFallback extends StatefulWidget {
@@ -1107,3 +1335,5 @@ class _ManualEntryFallbackState extends State<_ManualEntryFallback> {
     );
   }
 }
+
+enum _RecipeEditorAction { newRevision }

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/settings/settings_provider.dart';
+import '../recipes/recipe_models.dart';
+import '../recipes/recipes_repository.dart';
 import 'batch_models.dart';
 
 typedef TileSaveCallback = Future<void> Function(
@@ -8,34 +12,37 @@ typedef TileSaveCallback = Future<void> Function(
   String? outcome,
   String? atmosphere,
   String? temperature,
+  String? tileName,
 );
 
-class TileEditorSheet extends StatefulWidget {
+class TileEditorSheet extends ConsumerStatefulWidget {
   const TileEditorSheet({
     super.key,
     required this.batchId,
     this.existingTile,
+    this.nextTileNum,
     required this.onSave,
   });
 
   final String batchId;
   final TestTile? existingTile;
+  final int? nextTileNum;
   final TileSaveCallback onSave;
 
   @override
-  State<TileEditorSheet> createState() => _TileEditorSheetState();
+  ConsumerState<TileEditorSheet> createState() => _TileEditorSheetState();
 }
 
-class _TileEditorSheetState extends State<TileEditorSheet> {
+class _TileEditorSheetState extends ConsumerState<TileEditorSheet> {
   static const _outcomes = ['Pass', 'Fail', 'Promising', 'Interesting', 'Problematic'];
   static const _atmospheres = ['Oxidation', 'Reduction', 'Neutral', 'Soda', 'Wood', 'Salt'];
 
-  // One entry per layer — parallel to _layerData
   final List<_LayerState> _layerStates = [];
   String? _outcome;
   String? _atmosphere;
   final _notesCtrl = TextEditingController();
   final _tempCtrl = TextEditingController();
+  final _tileNameCtrl = TextEditingController();
   bool _saving = false;
 
   @override
@@ -43,13 +50,22 @@ class _TileEditorSheetState extends State<TileEditorSheet> {
     super.initState();
     final tile = widget.existingTile;
     if (tile != null) {
+      _tileNameCtrl.text = tile.tileName ?? '#${tile.tileNum}';
       for (final layer in tile.glazeLayers) {
         _layerStates.add(_LayerState.fromLayer(layer));
       }
-      _outcome = tile.outcome;
+      _outcome    = tile.outcome;
       _atmosphere = tile.atmosphere;
       _notesCtrl.text = tile.notes ?? '';
-      _tempCtrl.text = tile.temperature ?? '';
+      _tempCtrl.text  = tile.temperature ?? '';
+    } else {
+      _tileNameCtrl.text =
+          widget.nextTileNum != null ? '#${widget.nextTileNum}' : '';
+      // Pre-apply atmosphere default for new tiles (empty string = no default).
+      final settings = ref.read(settingsNotifierProvider);
+      if (settings.defaultAtmosphere.isNotEmpty) {
+        _atmosphere = settings.defaultAtmosphere;
+      }
     }
   }
 
@@ -60,6 +76,7 @@ class _TileEditorSheetState extends State<TileEditorSheet> {
     }
     _notesCtrl.dispose();
     _tempCtrl.dispose();
+    _tileNameCtrl.dispose();
     super.dispose();
   }
 
@@ -68,6 +85,24 @@ class _TileEditorSheetState extends State<TileEditorSheet> {
       .entries
       .map((e) => e.value.toLayer(e.key + 1))
       .toList();
+
+  Future<void> _pickRecipeForLayer(_LayerState layer) async {
+    final result = await showModalBottomSheet<RecipeSummary>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => const _RecipePickerSheet(),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      layer.recipeId = result.id;
+      layer.revisionNum = result.revisionCount;
+      layer.recipeName = result.name;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,18 +124,48 @@ class _TileEditorSheetState extends State<TileEditorSheet> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 4, 8),
             child: Row(
               children: [
-                Text(
-                  isEdit ? 'Tile #${widget.existingTile!.tileNum}' : 'New Tile',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Expanded(
+                  child: TextField(
+                    controller: _tileNameCtrl,
+                    decoration: InputDecoration(
+                      hintText: isEdit
+                          ? '#${widget.existingTile!.tileNum}'
+                          : 'Name (e.g. #${widget.nextTileNum ?? 1})',
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    style: Theme.of(context).textTheme.titleLarge,
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
                 ),
-                const Spacer(),
                 TextButton(
                   onPressed: Navigator.of(context).pop,
                   child: const Text('Cancel'),
                 ),
+                if (_saving)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  TextButton(
+                    onPressed: _save,
+                    child: Text(
+                      isEdit ? 'Save' : 'Add',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -142,6 +207,7 @@ class _TileEditorSheetState extends State<TileEditorSheet> {
                         state: s,
                         onChanged: () => setState(() {}),
                         onRemove: () => setState(() => _layerStates.removeAt(i)),
+                        onPickRecipe: () => _pickRecipeForLayer(s),
                       );
                     }).toList(),
                   ),
@@ -208,17 +274,7 @@ class _TileEditorSheetState extends State<TileEditorSheet> {
                   textCapitalization: TextCapitalization.sentences,
                 ),
 
-                const SizedBox(height: 28),
-
-                FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : Text(isEdit ? 'Save Changes' : 'Add Tile'),
-                ),
+                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -228,18 +284,24 @@ class _TileEditorSheetState extends State<TileEditorSheet> {
   }
 
   void _addLayer() {
-    setState(() => _layerStates.add(_LayerState()));
+    final settings = ref.read(settingsNotifierProvider);
+    setState(() => _layerStates.add(
+        _LayerState(defaultMethod: settings.defaultApplicationMethod)));
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
+      final tileName = _tileNameCtrl.text.trim().isEmpty
+          ? null
+          : _tileNameCtrl.text.trim();
       await widget.onSave(
         _buildLayers,
         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         _outcome,
         _atmosphere,
         _tempCtrl.text.trim().isEmpty ? null : _tempCtrl.text.trim(),
+        tileName,
       );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -254,38 +316,43 @@ class _TileEditorSheetState extends State<TileEditorSheet> {
   }
 }
 
-// Holds mutable state for a single layer — lives in the parent State list
+// ── Layer state ───────────────────────────────────────────────────────────────
+
 class _LayerState {
   final Key key = UniqueKey();
-  final TextEditingController nameCtrl;
+  String? recipeId;
+  int? revisionNum;
+  String? recipeName;
   final TextEditingController coatCtrl;
   String? applicationMethod;
   String? thickness;
 
-  _LayerState()
-      : nameCtrl = TextEditingController(),
-        coatCtrl = TextEditingController();
+  _LayerState({String? defaultMethod})
+      : coatCtrl = TextEditingController(text: '1'),
+        applicationMethod = defaultMethod;
 
   _LayerState.fromLayer(GlazeLayer layer)
-      : nameCtrl = TextEditingController(text: layer.recipeName ?? ''),
-        coatCtrl = TextEditingController(
-            text: layer.coatCount != null ? '${layer.coatCount}' : ''),
+      : recipeId = layer.recipeId,
+        revisionNum = layer.revisionNum,
+        recipeName = layer.recipeName,
+        coatCtrl = TextEditingController(text: '${layer.coatCount ?? 1}'),
         applicationMethod = layer.applicationMethod,
         thickness = layer.thickness;
 
   GlazeLayer toLayer(int order) => GlazeLayer(
         layerOrder: order,
-        recipeName: nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim(),
+        recipeId: recipeId,
+        revisionNum: revisionNum,
+        recipeName: recipeName,
         coatCount: int.tryParse(coatCtrl.text.trim()),
         applicationMethod: applicationMethod,
         thickness: thickness,
       );
 
-  void dispose() {
-    nameCtrl.dispose();
-    coatCtrl.dispose();
-  }
+  void dispose() => coatCtrl.dispose();
 }
+
+// ── Layer editor card ─────────────────────────────────────────────────────────
 
 class _LayerEditorCard extends StatelessWidget {
   const _LayerEditorCard({
@@ -294,24 +361,26 @@ class _LayerEditorCard extends StatelessWidget {
     required this.state,
     required this.onChanged,
     required this.onRemove,
+    required this.onPickRecipe,
   });
 
   final int layerNum;
   final _LayerState state;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
+  final VoidCallback onPickRecipe;
 
   static const _applicationMethods = ['Brush', 'Dip', 'Spray', 'Pour', 'Other'];
   static const _thicknesses = ['Thin', 'Medium', 'Thick'];
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasRecipe = state.recipeId != null;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      color: Theme.of(context)
-          .colorScheme
-          .surfaceContainerHighest
-          .withValues(alpha: 0.5),
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Column(
@@ -334,30 +403,93 @@ class _LayerEditorCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            TextField(
-              controller: state.nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Glaze name',
-                isDense: true,
-                border: OutlineInputBorder(),
+            // Recipe selector
+            InkWell(
+              onTap: onPickRecipe,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: hasRecipe
+                        ? scheme.primary.withValues(alpha: 0.5)
+                        : scheme.outline,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.science_outlined,
+                      size: 16,
+                      color: hasRecipe ? scheme.primary : scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        state.recipeName ?? 'Select a glaze recipe',
+                        style: TextStyle(
+                          color: hasRecipe
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Icon(
+                      hasRecipe ? Icons.edit_outlined : Icons.chevron_right,
+                      size: hasRecipe ? 14 : 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
               ),
-              textCapitalization: TextCapitalization.words,
             ),
             const SizedBox(height: 10),
             Row(
               children: [
-                SizedBox(
-                  width: 80,
-                  child: TextField(
-                    controller: state.coatCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Coats',
-                      isDense: true,
-                      border: OutlineInputBorder(),
+                Builder(builder: (context) {
+                  final coats = int.tryParse(state.coatCtrl.text) ?? 1;
+                  return SizedBox(
+                    width: 100,
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Coats',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          GestureDetector(
+                            onTap: coats > 1
+                                ? () {
+                                    state.coatCtrl.text = '${coats - 1}';
+                                    onChanged();
+                                  }
+                                : null,
+                            child: Icon(Icons.remove, size: 16,
+                                color: coats > 1
+                                    ? null
+                                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
+                          ),
+                          Text('$coats',
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w500)),
+                          GestureDetector(
+                            onTap: () {
+                              state.coatCtrl.text = '${coats + 1}';
+                              onChanged();
+                            },
+                            child: const Icon(Icons.add, size: 16),
+                          ),
+                        ],
+                      ),
                     ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
+                  );
+                }),
                 const SizedBox(width: 10),
                 Expanded(
                   child: DropdownButtonFormField<String>(
@@ -400,6 +532,135 @@ class _LayerEditorCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Recipe picker sheet ───────────────────────────────────────────────────────
+
+class _RecipePickerSheet extends ConsumerStatefulWidget {
+  const _RecipePickerSheet();
+
+  @override
+  ConsumerState<_RecipePickerSheet> createState() => _RecipePickerSheetState();
+}
+
+class _RecipePickerSheetState extends ConsumerState<_RecipePickerSheet> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recipesAsync = ref.watch(recipesListProvider);
+    final scheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Text('Select Glaze Recipe',
+                style: Theme.of(context).textTheme.titleMedium),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search recipes...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                border: const OutlineInputBorder(),
+                isDense: true,
+                suffixIcon: _query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _query = '');
+                        },
+                      )
+                    : null,
+              ),
+              onChanged: (v) => setState(() => _query = v.toLowerCase()),
+            ),
+          ),
+          SizedBox(
+            height: 300,
+            child: recipesAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('Failed to load recipes',
+                      style: TextStyle(color: scheme.error)),
+                ),
+              ),
+              data: (recipes) {
+                final filtered = _query.isEmpty
+                    ? recipes
+                    : recipes
+                        .where((r) => r.name.toLowerCase().contains(_query))
+                        .toList();
+
+                if (filtered.isEmpty) {
+                  return Center(
+                    child: Text(
+                      _query.isEmpty
+                          ? 'No recipes yet.'
+                          : 'No results for "$_query"',
+                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final r = filtered[i];
+                    final meta = [
+                      if (r.cone.isNotEmpty) 'Cone ${r.cone}',
+                      if (r.firingType.isNotEmpty) r.firingType,
+                    ].join(' · ');
+                    return ListTile(
+                      leading: const Icon(Icons.science_outlined),
+                      title: Text(r.name),
+                      subtitle: meta.isNotEmpty ? Text(meta) : null,
+                      trailing: r.revisionCount > 1
+                          ? Text('v${r.revisionCount}',
+                              style: Theme.of(context).textTheme.bodySmall)
+                          : null,
+                      dense: true,
+                      onTap: () => Navigator.of(context).pop(r),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }

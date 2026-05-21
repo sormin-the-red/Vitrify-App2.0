@@ -95,7 +95,8 @@ class _BatchDetailView extends ConsumerWidget {
       useSafeArea: true,
       builder: (_) => TileEditorSheet(
         batchId: batch.id,
-        onSave: (layers, notes, outcome, atmosphere, temperature) async {
+        nextTileNum: batch.tiles.length + 1,
+        onSave: (layers, notes, outcome, atmosphere, temperature, tileName) async {
           await repo.addTile(
             batch.id,
             glazeLayers: layers,
@@ -103,6 +104,7 @@ class _BatchDetailView extends ConsumerWidget {
             outcome: outcome,
             atmosphere: atmosphere,
             temperature: temperature,
+            tileName: tileName,
           );
           ref.invalidate(batchDetailProvider(batch.id));
         },
@@ -132,29 +134,44 @@ class _TileCard extends ConsumerWidget {
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    child: Text('#${tile.tileNum}',
+                    child: Text('${tile.tileNum}',
                         style: const TextStyle(
                             fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      tile.glazeLayers.isEmpty
-                          ? 'No glazes'
-                          : tile.glazeLayers
-                              .map((l) => l.recipeName ?? 'Unknown glaze')
-                              .join(' + '),
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          tile.tileName ??
+                              (tile.glazeLayers.isEmpty
+                                  ? 'No glazes'
+                                  : tile.glazeLayers
+                                      .map((l) => l.recipeName ?? 'Unknown glaze')
+                                      .join(' + ')),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        if (tile.tileName != null && tile.glazeLayers.isNotEmpty)
+                          Text(
+                            tile.glazeLayers
+                                .map((l) => l.recipeName ?? 'Unknown glaze')
+                                .join(' + '),
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey),
+                          ),
+                      ],
                     ),
                   ),
-                  if (tile.outcome != null) _OutcomeChip(tile.outcome!),
+                  if (tile.outcome != null && tile.outcome!.isNotEmpty) _OutcomeChip(tile.outcome!),
                 ],
               ),
               if (tile.glazeLayers.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 ...tile.glazeLayers.map((l) => _LayerRow(layer: l)),
               ],
-              if (tile.atmosphere != null || tile.temperature != null) ...[
+              if ((tile.atmosphere?.isNotEmpty ?? false) || (tile.temperature?.isNotEmpty ?? false)) ...[
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
@@ -189,7 +206,7 @@ class _TileCard extends ConsumerWidget {
       builder: (_) => TileEditorSheet(
         batchId: batchId,
         existingTile: tile,
-        onSave: (layers, notes, outcome, atmosphere, temperature) async {
+        onSave: (layers, notes, outcome, atmosphere, temperature, tileName) async {
           await repo.updateTile(
             batchId,
             tile.tileNum,
@@ -198,6 +215,7 @@ class _TileCard extends ConsumerWidget {
             outcome: outcome,
             atmosphere: atmosphere,
             temperature: temperature,
+            tileName: tileName,
           );
           ref.invalidate(batchDetailProvider(batchId));
         },

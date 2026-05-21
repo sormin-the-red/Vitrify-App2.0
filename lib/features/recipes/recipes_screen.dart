@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -77,11 +79,57 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
 
 // ── Recipe list tab ───────────────────────────────────────────────────────────
 
-class _RecipeList extends ConsumerWidget {
+class _RecipeList extends ConsumerStatefulWidget {
   const _RecipeList();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_RecipeList> createState() => _RecipeListState();
+}
+
+class _RecipeListState extends ConsumerState<_RecipeList> {
+  final Map<String, Timer> _pendingDeletes = {};
+
+  @override
+  void dispose() {
+    for (final t in _pendingDeletes.values) {
+      t.cancel();
+    }
+    super.dispose();
+  }
+
+  void _dismissRecipe(RecipeSummary recipe) {
+    setState(() {
+      _pendingDeletes[recipe.id]?.cancel();
+      _pendingDeletes[recipe.id] = Timer(const Duration(seconds: 4), () async {
+        try {
+          await ref.read(recipesRepositoryProvider).deleteRecipe(recipe.id);
+        } finally {
+          if (mounted) {
+            setState(() => _pendingDeletes.remove(recipe.id));
+            ref.invalidate(recipesListProvider);
+          }
+        }
+      });
+    });
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${recipe.name}" deleted'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            _pendingDeletes[recipe.id]?.cancel();
+            setState(() => _pendingDeletes.remove(recipe.id));
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(recipesListProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -90,7 +138,8 @@ class _RecipeList extends ConsumerWidget {
         onRetry: () => ref.invalidate(recipesListProvider),
       ),
       data: (recipes) {
-        if (recipes.isEmpty) {
+        final visible = recipes.where((r) => !_pendingDeletes.containsKey(r.id)).toList();
+        if (visible.isEmpty && _pendingDeletes.isEmpty) {
           return const _EmptyView(
             icon: Icons.science_outlined,
             label: 'No recipes yet.',
@@ -101,20 +150,74 @@ class _RecipeList extends ConsumerWidget {
           onRefresh: () async => ref.invalidate(recipesListProvider),
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-            itemCount: recipes.length,
+            itemCount: visible.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _RecipeCard(recipe: recipes[i], ref: ref),
+            itemBuilder: (_, i) {
+              final recipe = visible[i];
+              return Dismissible(
+                key: ValueKey(recipe.id),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade400,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.delete_outline, color: Colors.white),
+                ),
+                onDismissed: (_) => _dismissRecipe(recipe),
+                child: _RecipeCard(
+                  recipe: recipe,
+                  onDelete: () => _confirmDelete(context, recipe),
+                ),
+              );
+            },
           ),
         );
       },
     );
   }
+
+  void _confirmDelete(BuildContext context, RecipeSummary recipe) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete recipe?'),
+        content: Text(
+            'Delete "${recipe.name}" and all its revisions? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref
+                    .read(recipesRepositoryProvider)
+                    .deleteRecipe(recipe.id);
+                ref.invalidate(recipesListProvider);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')));
+                }
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _RecipeCard extends StatelessWidget {
-  const _RecipeCard({required this.recipe, required this.ref});
+  const _RecipeCard({required this.recipe, required this.onDelete});
   final RecipeSummary recipe;
-  final WidgetRef ref;
+  final VoidCallback onDelete;
 
   Color _statusColor(String s) => switch (s) {
         'Testing' => Colors.orange,
@@ -188,41 +291,7 @@ class _RecipeCard extends StatelessWidget {
           ],
         ),
         onTap: () => context.push('/recipe/${recipe.id}'),
-        onLongPress: () => _confirmDelete(context),
-      ),
-    );
-  }
-
-  void _confirmDelete(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete recipe?'),
-        content: Text(
-            'Delete "${recipe.name}" and all its revisions? This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                await ref
-                    .read(recipesRepositoryProvider)
-                    .deleteRecipe(recipe.id);
-                ref.invalidate(recipesListProvider);
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')));
-                }
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+        onLongPress: onDelete,
       ),
     );
   }
@@ -245,11 +314,57 @@ class _RecipeIcon extends StatelessWidget {
 
 // ── Schedule list tab ─────────────────────────────────────────────────────────
 
-class _ScheduleList extends ConsumerWidget {
+class _ScheduleList extends ConsumerStatefulWidget {
   const _ScheduleList();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ScheduleList> createState() => _ScheduleListState();
+}
+
+class _ScheduleListState extends ConsumerState<_ScheduleList> {
+  final Map<String, Timer> _pendingDeletes = {};
+
+  @override
+  void dispose() {
+    for (final t in _pendingDeletes.values) {
+      t.cancel();
+    }
+    super.dispose();
+  }
+
+  void _dismissSchedule(ScheduleSummary schedule) {
+    setState(() {
+      _pendingDeletes[schedule.id]?.cancel();
+      _pendingDeletes[schedule.id] = Timer(const Duration(seconds: 4), () async {
+        try {
+          await ref.read(schedulesRepositoryProvider).deleteSchedule(schedule.id);
+        } finally {
+          if (mounted) {
+            setState(() => _pendingDeletes.remove(schedule.id));
+            ref.invalidate(schedulesListProvider);
+          }
+        }
+      });
+    });
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${schedule.name}" deleted'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            _pendingDeletes[schedule.id]?.cancel();
+            setState(() => _pendingDeletes.remove(schedule.id));
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(schedulesListProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -258,7 +373,8 @@ class _ScheduleList extends ConsumerWidget {
         onRetry: () => ref.invalidate(schedulesListProvider),
       ),
       data: (schedules) {
-        if (schedules.isEmpty) {
+        final visible = schedules.where((s) => !_pendingDeletes.containsKey(s.id)).toList();
+        if (visible.isEmpty && _pendingDeletes.isEmpty) {
           return const _EmptyView(
             icon: Icons.local_fire_department_outlined,
             label: 'No firing schedules yet.',
@@ -269,21 +385,74 @@ class _ScheduleList extends ConsumerWidget {
           onRefresh: () async => ref.invalidate(schedulesListProvider),
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-            itemCount: schedules.length,
+            itemCount: visible.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (_, i) =>
-                _ScheduleCard(schedule: schedules[i], ref: ref),
+            itemBuilder: (_, i) {
+              final schedule = visible[i];
+              return Dismissible(
+                key: ValueKey(schedule.id),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade400,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.delete_outline, color: Colors.white),
+                ),
+                onDismissed: (_) => _dismissSchedule(schedule),
+                child: _ScheduleCard(
+                  schedule: schedule,
+                  onDelete: () => _confirmDelete(context, schedule),
+                ),
+              );
+            },
           ),
         );
       },
     );
   }
+
+  void _confirmDelete(BuildContext context, ScheduleSummary schedule) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete schedule?'),
+        content:
+            Text('Delete "${schedule.name}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref
+                    .read(schedulesRepositoryProvider)
+                    .deleteSchedule(schedule.id);
+                ref.invalidate(schedulesListProvider);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')));
+                }
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ScheduleCard extends StatelessWidget {
-  const _ScheduleCard({required this.schedule, required this.ref});
+  const _ScheduleCard({required this.schedule, required this.onDelete});
   final ScheduleSummary schedule;
-  final WidgetRef ref;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -322,41 +491,7 @@ class _ScheduleCard extends StatelessWidget {
           ],
         ),
         onTap: () => context.push('/schedule/${schedule.id}'),
-        onLongPress: () => _confirmDelete(context),
-      ),
-    );
-  }
-
-  void _confirmDelete(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete schedule?'),
-        content:
-            Text('Delete "${schedule.name}"? This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                await ref
-                    .read(schedulesRepositoryProvider)
-                    .deleteSchedule(schedule.id);
-                ref.invalidate(schedulesListProvider);
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e')));
-                }
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+        onLongPress: onDelete,
       ),
     );
   }

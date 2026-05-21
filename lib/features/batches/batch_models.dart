@@ -65,6 +65,7 @@ const _sentinel = _Sentinel();
 
 class TestTile {
   final int tileNum;
+  final String? tileName;
   final List<GlazeLayer> glazeLayers;
   final String? notes;
   final String? outcome;
@@ -75,6 +76,7 @@ class TestTile {
 
   const TestTile({
     required this.tileNum,
+    this.tileName,
     required this.glazeLayers,
     this.notes,
     this.outcome,
@@ -86,16 +88,20 @@ class TestTile {
 
   factory TestTile.fromJson(Map<String, dynamic> j) => TestTile(
         tileNum: (j['tileNum'] as num?)?.toInt() ?? 0,
+        tileName: _ne(j['tileName'] as String?),
         glazeLayers: (j['glazeLayers'] as List<dynamic>? ?? [])
             .map((e) => GlazeLayer.fromJson(e as Map<String, dynamic>))
             .toList(),
-        notes: j['notes'] as String?,
-        outcome: j['outcome'] as String?,
-        atmosphere: j['atmosphere'] as String?,
-        temperature: j['temperature'] as String?,
+        notes: _ne(j['notes'] as String?),
+        outcome: _ne(j['outcome'] as String?),
+        atmosphere: _ne(j['atmosphere'] as String?),
+        temperature: _ne(j['temperature'] as String?),
         photoUrls: (j['photoUrls'] as List<dynamic>? ?? []).cast<String>(),
-        firingScheduleId: j['firingScheduleId'] as String?,
+        firingScheduleId: _ne(j['firingScheduleId'] as String?),
       );
+
+  // Backend stores "" for unset optional fields; treat as null on the client.
+  static String? _ne(String? s) => (s != null && s.isNotEmpty) ? s : null;
 }
 
 class BatchSummary {

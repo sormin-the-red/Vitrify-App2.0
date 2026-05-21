@@ -106,3 +106,122 @@ const umfDisplayGroups = [
   ['Al2O3', 'Fe2O3', 'B2O3'],
   ['SiO2', 'TiO2', 'ZrO2'],
 ];
+
+// ── Zone detection ────────────────────────────────────────────────────────────
+
+enum GlazeZone { underfired, running, matte, glossy }
+
+GlazeZone umfZone(UmfResult umf) {
+  final si = umf.si;
+  final al = umf.al;
+  if (si < 2.0) return GlazeZone.underfired;
+  if (al < 0.2) return GlazeZone.running;
+  if (al >= 0.75 - 0.1 * si) return GlazeZone.matte;
+  return GlazeZone.glossy;
+}
+
+// ── Suggestions ───────────────────────────────────────────────────────────────
+
+class GlazeSuggestion {
+  final String message;
+  final String detail;
+  final bool isWarning;
+  const GlazeSuggestion(this.message, this.detail, {this.isWarning = false});
+}
+
+List<GlazeSuggestion> glazeSuggestions(UmfResult umf) {
+  final suggestions = <GlazeSuggestion>[];
+  final si     = umf.si;
+  final al     = umf.al;
+  final b      = umf.b;
+  final na2o   = umf.oxides['Na2O'] ?? 0;
+  final k2o    = umf.oxides['K2O']  ?? 0;
+  final cao    = umf.oxides['CaO']  ?? 0;
+  final mgo    = umf.oxides['MgO']  ?? 0;
+  final alkali = na2o + k2o;
+
+  // Silica
+  if (si < 1.5) {
+    suggestions.add(const GlazeSuggestion(
+      'Si very low — underfired zone',
+      'Add Silica 15-25% to improve stability and durability.',
+      isWarning: true,
+    ));
+  } else if (si < 2.0) {
+    suggestions.add(const GlazeSuggestion(
+      'Si low',
+      'Add Silica 8-15% for a more stable glaze.',
+    ));
+  } else if (si < 2.5) {
+    suggestions.add(const GlazeSuggestion(
+      'Si a bit low',
+      'Consider adding Silica 5-10%.',
+    ));
+  } else if (si > 5.0) {
+    suggestions.add(const GlazeSuggestion(
+      'Si very high',
+      'Reduce Silica or increase flux materials.',
+      isWarning: true,
+    ));
+  }
+
+  // Alumina
+  if (al < 0.15) {
+    suggestions.add(const GlazeSuggestion(
+      'Al very low — may run badly',
+      'Add EPK Kaolin 8-12% or Alumina Hydrate 4-6%.',
+      isWarning: true,
+    ));
+  } else if (al < 0.25) {
+    suggestions.add(const GlazeSuggestion(
+      'Al low',
+      'Add EPK Kaolin 4-8% to improve stability.',
+    ));
+  } else if (al > 0.6) {
+    suggestions.add(const GlazeSuggestion(
+      'Al high — matte zone',
+      'Reduce Kaolin 5-10% for a glossier result.',
+    ));
+  }
+
+  // Boron
+  if (b > 0.8) {
+    suggestions.add(const GlazeSuggestion(
+      'B₂O₃ very high',
+      'Risk of crawling — reduce Gerstley Borate or boron frit.',
+      isWarning: true,
+    ));
+  }
+
+  // Alkali balance
+  if (alkali < 0.1) {
+    suggestions.add(const GlazeSuggestion(
+      'Low alkali fluxes',
+      'Add Custer Feldspar or Nepheline Syenite for K₂O/Na₂O.',
+    ));
+  } else if (alkali > 0.6) {
+    suggestions.add(const GlazeSuggestion(
+      'High alkali — crazing risk',
+      'Reduce feldspar or add Whiting/Dolomite.',
+      isWarning: true,
+    ));
+  }
+
+  // CaO/MgO balance
+  if (cao > 0.7 && mgo < 0.05) {
+    suggestions.add(const GlazeSuggestion(
+      'CaO dominant, MgO absent',
+      'Add Dolomite or Talc to introduce MgO for a smoother surface.',
+    ));
+  }
+
+  // Si:Al ratio
+  if (al > 0 && si / al > 10) {
+    suggestions.add(const GlazeSuggestion(
+      'Si:Al ratio very high',
+      'Add EPK Kaolin to balance silica and alumina.',
+    ));
+  }
+
+  return suggestions;
+}

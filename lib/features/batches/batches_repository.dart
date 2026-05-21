@@ -57,6 +57,7 @@ class BatchesRepository {
     String? temperature,
     List<String>? photoUrls,
     String? firingScheduleId,
+    String? tileName,
   }) async {
     final res = await _api.post('/batches/$batchId/tiles', body: {
       'glazeLayers': glazeLayers.map((l) => l.toJson()).toList(),
@@ -66,6 +67,7 @@ class BatchesRepository {
       'temperature': ?temperature,
       'photoUrls': ?photoUrls,
       'firingScheduleId': ?firingScheduleId,
+      'tileName': ?tileName,
     });
     if (res.statusCode != 201) throw Exception('Failed to add tile');
   }
@@ -78,6 +80,7 @@ class BatchesRepository {
     String? temperature,
     List<String>? photoUrls,
     String? firingScheduleId,
+    String? tileName,
   }) async {
     final res = await _api.put('/batches/$batchId/tiles/$tileNum', body: {
       'glazeLayers': glazeLayers.map((l) => l.toJson()).toList(),
@@ -87,6 +90,7 @@ class BatchesRepository {
       'temperature': ?temperature,
       'photoUrls': ?photoUrls,
       'firingScheduleId': ?firingScheduleId,
+      'tileName': ?tileName,
     });
     if (res.statusCode != 200) throw Exception('Failed to update tile');
   }

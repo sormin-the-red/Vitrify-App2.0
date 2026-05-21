@@ -1,0 +1,135 @@
+GlazeVault — Feature List
+=========================
+Generated: 2026-05-20
+
+
+STUDIO (RECIPES & SCHEDULES)
+─────────────────────────────
+
+Recipes
+-------
+- Create, edit, and delete glaze recipes
+- Recipe fields: name, description, cone, firing type, notes, public/private toggle
+- Ingredient editor with separate base and additions sections
+- Ingredients added from a searchable material database (1000+ ceramic materials via
+  CDN, cached locally) or entered manually as free text
+- Percentage-based ingredient quantities; additions can exceed 100% base total
+- Ingredient progress bars with base total validator (warns if not ~100%)
+- Recipe status tags: New / Testing / Tested
+- Photo upload with carousel viewer (multiple images per recipe)
+- UMF (Unity Molecular Formula) chemistry calculation for base ingredients, displayed
+  as a bar table grouped by oxide family
+- Stull Chart — plots the recipe's SiO2/Al2O3 position across Matte / Glossy /
+  Running / Underfired zones
+- AI-powered recipe generation: describe a glaze in natural language and receive an
+  ingredient list (daily rate limit handled gracefully with a 429 error message)
+- Revision history: each deliberate "Save as New Revision" creates a numbered version;
+  plain Save updates the current revision in place
+- Revision picker — view any historical version from the detail screen; a banner
+  indicates when a non-latest version is being viewed
+- Revision-aware editing — editing an old version saves that version in place, not the
+  latest
+- Side-by-side revision diff — select any two versions in the history sheet and see
+  added / removed / changed ingredients with percentage deltas, color-coded green /
+  red / orange
+- Batch weight scaling — toggle a scale input on the detail screen; ingredient
+  percentages are shown alongside gram amounts for any target batch weight
+- Duplicate recipe — clone any recipe (with the current revision's materials) into a
+  new recipe, with a rename dialog; navigates to the new record
+- Log Test Batch — FAB on recipe detail creates a new batch pre-loaded with this
+  recipe as a glaze layer, then navigates to the batch
+- Swipe-to-delete on the recipe list with a 4-second undo snackbar (API call is
+  deferred and cancellable)
+- Long-press-to-delete fallback (confirmation dialog)
+- Public sharing flag
+- Like count display
+
+Firing Schedules
+----------------
+- Create, edit, and delete firing schedules
+- Schedule fields: name, description, notes, temperature scale (F/C), max cone,
+  public/private
+- Segment editor: add / edit / remove segments; each segment has From, To, Rate/hr,
+  Hold (minutes), and an optional note
+- "From" temperature is locked for segments 2+ — always equals the previous segment's
+  end temperature (the kiln cannot teleport between segments)
+- Temperature validation: min 50F / 10C, max 3,659F / 2,015C (cone 42)
+- Live firing chart preview inside the segment add/edit modal — updates as you type
+- Firing chart with bezier-rounded segment junctions, per-segment time estimates,
+  color-coded segments, legend, and total duration display
+- Compact segment tile list in the editor (tap to edit, x to remove)
+- Revision history with the same system as recipes (Save vs. Save as New Revision)
+- Revision picker and revision-aware editing
+- Side-by-side revision diff — compares segments (added / removed / changed
+  temperatures and rates) and linked recipe changes, color-coded
+- Linked recipes — attach one or more recipes to a schedule revision; linked recipes
+  appear as tappable chips on the detail screen; managed via a recipe picker in the
+  editor; persisted as linkedRecipeIds on the revision
+- Duplicate schedule — clone any schedule into a new one with a rename dialog;
+  navigates to the new record
+- Swipe-to-delete with undo, long-press-to-delete fallback
+
+
+TEST BATCHES
+────────────
+- Create, view, and delete test batches
+- Batch fields: name, description, cone, firing type
+- Test tile tracking per batch: glaze layers, notes, outcome, atmosphere, temperature,
+  firing schedule link, photo upload
+- Glaze layer model: recipe ID, revision number, recipe name, application method,
+  coat count, thickness
+- Tile editor sheet for adding and editing tiles
+- Batch detail screen with full tile list
+- Quick-create from recipe: "Log Test Batch" FAB on any recipe detail screen creates
+  a batch and pre-fills its first tile's glaze layer with the recipe ID, revision
+  number, and name
+
+
+INVENTORY
+─────────
+- Material inventory screen (stub, ready for implementation)
+
+
+COMMUNITY
+─────────
+- Community feed showing public recipes and schedules from other users
+- Like / heart system
+
+
+AUTH & ACCOUNT
+──────────────
+- AWS Cognito authentication (email + password)
+- Google Sign-In (working on web)
+- Facebook Sign-In (wired, not fully end-to-end tested)
+- Email registration with confirmation code flow
+- Profile screen
+- Auth gate — screens requiring auth show an inline sign-in prompt without losing
+  bottom navigation context or redirecting away from the current tab
+
+
+SETTINGS & PREFERENCES
+───────────────────────
+- Dark / light / system theme selection
+- Startup tab selection (feed, studio, batches, inventory, library)
+- Settings persisted via SharedPreferences across app restarts
+
+
+APP INFRASTRUCTURE
+──────────────────
+- Flutter targeting iOS, Android, and web
+- Riverpod 2.x state management with riverpod_annotation codegen
+  (keepAlive for global providers, auto-dispose for screen-scoped data)
+- go_router 14 with five shell tabs; detail screens sit outside the shell so the
+  bottom nav is hidden on detail views
+- Materials database (1000+ entries) downloaded once from CloudFront, cached in
+  SharedPreferences with background ETag check for freshness; falls back to bundled
+  asset when CDN is unreachable
+- All HTTP requests attach a Cognito ID token as Authorization: Bearer
+- Backend: AWS Lambda + DynamoDB + API Gateway
+  (base URL: https://r1x170wrfl.execute-api.us-east-2.amazonaws.com)
+- DynamoDB key patterns:
+    Recipes:   RECIPE#<id>/METADATA, RECIPE#<id>/REVISION#0001..N
+    Schedules: SCHEDULE#<id>/METADATA, SCHEDULE#<id>/REVISION#0001..N
+    Batches:   BATCH#<id>/METADATA, BATCH#<id>/TILE#<0001>
+    Hearts:    USER#<uid>/HEART#RECIPE#<id>
+    Feed GSI:  gsi1pk=FEED#RECIPES / FEED#SCHEDULES, sorted by dateModified#id

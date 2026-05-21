@@ -154,5 +154,116 @@ class _ScheduleDetailProviderElement
   String get id => (origin as ScheduleDetailProvider).id;
 }
 
+String _$scheduleRevisionsHash() =>
+    r'd7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6';
+
+/// See also [scheduleRevisions].
+@ProviderFor(scheduleRevisions)
+const scheduleRevisionsProvider = ScheduleRevisionsFamily();
+
+/// @macro riverpod_annotation.riverpod_family
+class ScheduleRevisionsFamily extends Family {
+  const ScheduleRevisionsFamily();
+
+  ScheduleRevisionsProvider call(String id) => ScheduleRevisionsProvider(id);
+
+  @override
+  ScheduleRevisionsProvider getProviderOverride(
+      covariant ScheduleRevisionsProvider provider) {
+    return call(provider.id);
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'scheduleRevisionsProvider';
+}
+
+class ScheduleRevisionsProvider
+    extends AutoDisposeFutureProvider<List<ScheduleRevision>> {
+  ScheduleRevisionsProvider(String id)
+      : this._internal(
+          (ref) => scheduleRevisions(ref as ScheduleRevisionsRef, id),
+          from: scheduleRevisionsProvider,
+          name: r'scheduleRevisionsProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$scheduleRevisionsHash,
+          dependencies: null,
+          allTransitiveDependencies: null,
+          id: id,
+        );
+
+  ScheduleRevisionsProvider._internal(
+    super.create, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.id,
+  }) : super.internal();
+
+  final String id;
+
+  @override
+  Override overrideWith(
+    FutureOr<List<ScheduleRevision>> Function(ScheduleRevisionsRef ref) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: ScheduleRevisionsProvider._internal(
+        (ref) => create(ref as ScheduleRevisionsRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        id: id,
+      ),
+    );
+  }
+
+  @override
+  (String,) get argument => (id,);
+
+  @override
+  AutoDisposeFutureProviderElement<List<ScheduleRevision>> createElement() {
+    return _ScheduleRevisionsProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is ScheduleRevisionsProvider && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
+mixin ScheduleRevisionsRef
+    on AutoDisposeFutureProviderRef<List<ScheduleRevision>> {
+  String get id;
+}
+
+class _ScheduleRevisionsProviderElement
+    extends AutoDisposeFutureProviderElement<List<ScheduleRevision>>
+    with ScheduleRevisionsRef {
+  _ScheduleRevisionsProviderElement(super.provider);
+
+  @override
+  String get id => (origin as ScheduleRevisionsProvider).id;
+}
+
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_gate.dart';
+import '../../core/settings/settings_provider.dart';
 import 'batch_models.dart';
 import 'batches_repository.dart';
 
@@ -33,10 +34,11 @@ class BatchesScreen extends ConsumerWidget {
   }
 
   static Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
+    final settings = ref.read(settingsNotifierProvider);
     final nameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
-    String? cone;
-    String? firingType;
+    String? cone = settings.defaultCone;
+    String? firingType = settings.defaultFiringType;
 
     final cones = ['022','021','020','019','018','017','016','015','014','013',
         '012','011','010','09','08','07','06','05','04','03','02','01',

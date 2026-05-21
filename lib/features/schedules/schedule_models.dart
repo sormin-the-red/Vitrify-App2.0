@@ -98,6 +98,7 @@ class ScheduleDetail extends ScheduleSummary {
   final String description;
   final String notes;
   final ScheduleRevision? revision;
+  final List<ScheduleRevision> revisions;
 
   const ScheduleDetail({
     required super.id,
@@ -113,6 +114,7 @@ class ScheduleDetail extends ScheduleSummary {
     required this.description,
     required this.notes,
     this.revision,
+    this.revisions = const [],
   });
 
   factory ScheduleDetail.fromJson(Map<String, dynamic> j) => ScheduleDetail(
@@ -131,5 +133,26 @@ class ScheduleDetail extends ScheduleSummary {
         revision: j['revision'] != null
             ? ScheduleRevision.fromJson(j['revision'] as Map<String, dynamic>)
             : null,
+        revisions: (j['revisions'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(ScheduleRevision.fromJson)
+            .toList(),
+      );
+
+  ScheduleDetail copyWith({ScheduleRevision? revision}) => ScheduleDetail(
+        id: id,
+        uid: uid,
+        name: name,
+        tempScale: tempScale,
+        maxCone: maxCone,
+        isPublic: isPublic,
+        likeCount: likeCount,
+        revisionCount: revisionCount,
+        dateCreated: dateCreated,
+        dateModified: dateModified,
+        description: description,
+        notes: notes,
+        revision: revision ?? this.revision,
+        revisions: revisions,
       );
 }

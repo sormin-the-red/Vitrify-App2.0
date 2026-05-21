@@ -100,9 +100,78 @@ class RecipesRepository {
     if (res.statusCode != 200) throw Exception('Failed to update recipe');
   }
 
+  Future<void> updateRevision(
+    String id,
+    int revisionNum, {
+    required String name,
+    String? description,
+    String? cone,
+    String? firingType,
+    String? notes,
+    bool isPublic = false,
+    required List<RecipeIngredient> materials,
+    List<String> imageUrls = const [],
+    String status = 'New',
+  }) async {
+    final res = await _api.put('/recipes/$id/revisions/$revisionNum', body: {
+      'name': name,
+      'description': ?description,
+      'cone': ?cone,
+      'firingType': ?firingType,
+      'notes': ?notes,
+      'public': isPublic,
+      'materials': materials.map((m) => m.toJson()).toList(),
+      'imageUrls': imageUrls,
+      'status': status,
+    });
+    if (res.statusCode != 200) throw Exception('Failed to update revision');
+  }
+
+  Future<void> createRevision(
+    String id, {
+    required String name,
+    String? description,
+    String? cone,
+    String? firingType,
+    String? notes,
+    bool isPublic = false,
+    required List<RecipeIngredient> materials,
+    List<String> imageUrls = const [],
+    String status = 'New',
+  }) async {
+    final res = await _api.post('/recipes/$id/revisions', body: {
+      'name': name,
+      'description': ?description,
+      'cone': ?cone,
+      'firingType': ?firingType,
+      'notes': ?notes,
+      'public': isPublic,
+      'materials': materials.map((m) => m.toJson()).toList(),
+      'imageUrls': imageUrls,
+      'status': status,
+    });
+    if (res.statusCode != 201) throw Exception('Failed to create revision');
+  }
+
   Future<void> deleteRecipe(String id) async {
     final res = await _api.delete('/recipes/$id');
     if (res.statusCode != 200) throw Exception('Failed to delete recipe');
+  }
+
+  Future<String> duplicateRecipe(String id) async {
+    final detail = await getRecipe(id);
+    final mats   = detail.revision?.materials ?? [];
+    return createRecipe(
+      name: '${detail.name} (Copy)',
+      description: detail.description.isEmpty ? null : detail.description,
+      cone:        detail.cone.isEmpty ? null : detail.cone,
+      firingType:  detail.firingType.isEmpty ? null : detail.firingType,
+      notes:       detail.notes.isEmpty ? null : detail.notes,
+      isPublic:    false,
+      materials:   mats,
+      imageUrls:   detail.revision?.imageUrls ?? [],
+      status:      detail.revision?.status ?? 'New',
+    );
   }
 
   Future<List<RecipeIngredient>> generateAiRecipe({

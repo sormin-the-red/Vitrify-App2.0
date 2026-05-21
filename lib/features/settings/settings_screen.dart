@@ -11,6 +11,10 @@ const _cones = [
 const _firingTypes = [
   'Oxidation', 'Reduction', 'Neutral', 'Soda', 'Wood', 'Salt',
 ];
+const _applicationMethods = ['Brush', 'Dip', 'Spray', 'Pour', 'Other'];
+const _atmospheres = [
+  '', 'Oxidation', 'Reduction', 'Neutral', 'Soda', 'Wood', 'Salt',
+];
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -83,6 +87,44 @@ class SettingsScreen extends ConsumerWidget {
                   .toList(),
               onChanged: (v) {
                 if (v != null) notifier.setDefaultFiringType(v);
+              },
+            ),
+          ),
+
+          // ── Batch Testing ─────────────────────────────────────────────────
+          const _SectionHeader('Batch Testing'),
+          ListTile(
+            leading: const Icon(Icons.layers_outlined),
+            title: const Text('Default application method'),
+            trailing: DropdownButton<String>(
+              value: _applicationMethods.contains(settings.defaultApplicationMethod)
+                  ? settings.defaultApplicationMethod
+                  : 'Dip',
+              underline: const SizedBox.shrink(),
+              items: _applicationMethods
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) notifier.setDefaultApplicationMethod(v);
+              },
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.air_outlined),
+            title: const Text('Default atmosphere'),
+            trailing: DropdownButton<String>(
+              value: _atmospheres.contains(settings.defaultAtmosphere)
+                  ? settings.defaultAtmosphere
+                  : '',
+              underline: const SizedBox.shrink(),
+              items: _atmospheres
+                  .map((a) => DropdownMenuItem(
+                        value: a,
+                        child: Text(a.isEmpty ? 'None' : a),
+                      ))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) notifier.setDefaultAtmosphere(v);
               },
             ),
           ),
