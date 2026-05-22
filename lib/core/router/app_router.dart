@@ -23,9 +23,32 @@ import '../../features/batches/batch_detail_screen.dart';
 import '../../features/inventory/inventory_screen.dart';
 import '../../features/library/library_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/mixes/mix_models.dart';
+import '../../features/mixes/mix_session_screen.dart';
 import '../../features/settings/settings_screen.dart';
 
 part 'app_router.g.dart';
+
+// Shared page transition: gentle upward fade-in (feels native on both platforms)
+CustomTransitionPage<T> _slide<T>(GoRouterState state, Widget child) {
+  return CustomTransitionPage<T>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 280),
+    reverseTransitionDuration: const Duration(milliseconds: 220),
+    transitionsBuilder: (context, animation, _, child) {
+      final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+      final slide = Tween(
+        begin: const Offset(0.0, 0.04),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
+      return FadeTransition(
+        opacity: fade,
+        child: SlideTransition(position: slide, child: child),
+      );
+    },
+  );
+}
 
 @Riverpod(keepAlive: true)
 GoRouter appRouter(AppRouterRef ref) {
@@ -42,84 +65,111 @@ GoRouter appRouter(AppRouterRef ref) {
     refreshListenable: authListenable,
     redirect: (context, state) {
       final auth = ref.read(authNotifierProvider);
-      if (auth is AuthLoading) return null;
-
-      final authenticated = auth is AuthAuthenticated;
       final loc = state.matchedLocation;
+
       final onAuthRoute = loc == '/login' ||
           loc == '/login/email' ||
           loc == '/register' ||
           loc.startsWith('/confirm');
 
-      if (authenticated && onAuthRoute) {
-        final from = state.uri.queryParameters['from'];
-        return (from != null && from.isNotEmpty) ? from : startupTab;
+      if (auth is AuthAuthenticated) {
+        // Redirect away from auth screens once signed in
+        if (onAuthRoute) return startupTab;
+        return null;
       }
 
-      if (!authenticated && (loc == '/settings' || loc == '/profile')) {
-        return '/login?from=${Uri.encodeComponent(loc)}';
-      }
-
-      return null;
+      // AuthLoading and AuthUnauthenticated both land on /login.
+      // The router re-evaluates when auth state changes, so authenticated
+      // users are forwarded to the app as soon as the session check resolves.
+      if (onAuthRoute) return null;
+      return '/login';
     },
     routes: [
       // ── Auth ──────────────────────────────────────────────────────────────
       GoRoute(
         path: '/login',
-        builder: (_, _) => const LoginScreen(),
+        pageBuilder: (_, state) => _slide(state, const LoginScreen()),
         routes: [
           GoRoute(
             path: 'email',
-            builder: (_, _) => const EmailLoginScreen(),
+            pageBuilder: (_, state) => _slide(state, const EmailLoginScreen()),
           ),
         ],
       ),
-      GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
+      GoRoute(
+        path: '/register',
+        pageBuilder: (_, state) => _slide(state, const RegisterScreen()),
+      ),
       GoRoute(
         path: '/confirm',
-        builder: (_, state) {
+        pageBuilder: (_, state) {
           final args = state.extra as ConfirmArgs?;
-          return ConfirmScreen(email: args?.email ?? '', password: args?.password);
+          return _slide(state,
+              ConfirmScreen(email: args?.email ?? '', password: args?.password));
         },
       ),
 
       // ── Profile & Settings ────────────────────────────────────────────────
-      GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
-      GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+      GoRoute(
+        path: '/profile',
+        pageBuilder: (_, state) => _slide(state, const ProfileScreen()),
+      ),
+      GoRoute(
+        path: '/settings',
+        pageBuilder: (_, state) => _slide(state, const SettingsScreen()),
+      ),
 
       // ── Recipes (outside shell so there's no bottom nav) ──────────────────
       GoRoute(
         path: '/recipe/new',
-        builder: (_, _) => const RecipeEditorScreen(),
+        pageBuilder: (_, state) => _slide(state, const RecipeEditorScreen()),
       ),
       GoRoute(
         path: '/recipe/:id',
-        builder: (_, state) =>
-            RecipeDetailScreen(recipeId: state.pathParameters['id']!),
+        pageBuilder: (_, state) => _slide(
+          state,
+          RecipeDetailScreen(recipeId: state.pathParameters['id']!),
+        ),
         routes: [
           GoRoute(
             path: 'edit',
-            builder: (_, state) => RecipeEditorScreen(
-              existing: state.extra as RecipeDetail?,
+            pageBuilder: (_, state) => _slide(
+              state,
+              RecipeEditorScreen(existing: state.extra as RecipeDetail?),
             ),
           ),
         ],
       ),
 
+      // ── Mix session (outside shell) ───────────────────────────────────────
+      GoRoute(
+        path: '/mix/:id',
+        pageBuilder: (_, state) => _slide(
+          state,
+          MixSessionScreen(
+            mixId: state.pathParameters['id']!,
+            initialMix: state.extra as GlazeMix?,
+          ),
+        ),
+      ),
+
       // ── Schedules (outside shell) ─────────────────────────────────────────
       GoRoute(
         path: '/schedule/new',
-        builder: (_, _) => const ScheduleEditorScreen(),
+        pageBuilder: (_, state) => _slide(state, const ScheduleEditorScreen()),
       ),
       GoRoute(
         path: '/schedule/:id',
-        builder: (_, state) =>
-            ScheduleDetailScreen(scheduleId: state.pathParameters['id']!),
+        pageBuilder: (_, state) => _slide(
+          state,
+          ScheduleDetailScreen(scheduleId: state.pathParameters['id']!),
+        ),
         routes: [
           GoRoute(
             path: 'edit',
-            builder: (_, state) => ScheduleEditorScreen(
-              existing: state.extra as ScheduleDetail?,
+            pageBuilder: (_, state) => _slide(
+              state,
+              ScheduleEditorScreen(existing: state.extra as ScheduleDetail?),
             ),
           ),
         ],

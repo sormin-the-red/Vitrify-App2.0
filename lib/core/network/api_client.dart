@@ -7,7 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'api_client.g.dart';
 
-const _baseUrl = 'https://r1x170wrfl.execute-api.us-east-2.amazonaws.com';
+const _baseUrl = 'https://a2gcaf5uqj.execute-api.us-east-2.amazonaws.com';
 
 class ApiClient {
   Future<http.Response> get(String path) async {
@@ -28,16 +28,6 @@ class ApiClient {
 
   Future<http.Response> delete(String path) async {
     return http.delete(_uri(path), headers: await _headers());
-  }
-
-  Future<http.Response> uploadBytes(
-      String path, List<int> bytes, String contentType) async {
-    final token = await _idToken();
-    return http.post(
-      _uri(path),
-      headers: {'Authorization': 'Bearer $token', 'Content-Type': contentType},
-      body: bytes,
-    );
   }
 
   Uri _uri(String path) => Uri.parse('$_baseUrl$path');

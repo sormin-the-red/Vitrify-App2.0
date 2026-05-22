@@ -5,6 +5,10 @@ class FeedItem {
   final String description;
   final String? cone;
   final String? firingType;
+  final List<String> color;
+  final String? finish;
+  final String? surface;
+  final String? transparency;
   final String? tempScale;
   final String? maxCone;
   final String? imageUrl;
@@ -20,6 +24,10 @@ class FeedItem {
     required this.description,
     this.cone,
     this.firingType,
+    this.color = const [],
+    this.finish,
+    this.surface,
+    this.transparency,
     this.tempScale,
     this.maxCone,
     this.imageUrl,
@@ -38,6 +46,10 @@ class FeedItem {
         description: j['description'] as String? ?? '',
         cone: j['cone'] as String?,
         firingType: j['firingType'] as String?,
+        color: (j['color'] as List<dynamic>? ?? []).cast<String>(),
+        finish: j['finish'] as String?,
+        surface: j['surface'] as String?,
+        transparency: j['transparency'] as String?,
         tempScale: j['tempScale'] as String?,
         maxCone: j['maxCone'] as String?,
         imageUrl: j['imageUrl'] as String?,

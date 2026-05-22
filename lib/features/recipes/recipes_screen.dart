@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/auth/auth_gate.dart';
+import '../../app.dart' show statusColor;
 import '../schedules/schedule_models.dart';
 import '../schedules/schedules_repository.dart';
 import 'recipe_models.dart';
@@ -36,42 +36,48 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
 
   @override
   Widget build(BuildContext context) {
-    return AuthGate(
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Studio'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: () => context.push('/settings'),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Studio'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: FilledButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(_tabs.index == 0 ? 'New Recipe' : 'New Schedule'),
+              onPressed: () => _tabs.index == 0
+                  ? context.push('/recipe/new')
+                  : context.push('/schedule/new'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                visualDensity: VisualDensity.compact,
+              ),
             ),
-            IconButton(
-              icon: const Icon(Icons.account_circle_outlined),
-              onPressed: () => context.push('/profile'),
-            ),
-          ],
-          bottom: TabBar(
-            controller: _tabs,
-            tabs: const [
-              Tab(text: 'Recipes'),
-              Tab(text: 'Schedules'),
-            ],
           ),
-        ),
-        body: TabBarView(
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.push('/settings'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            onPressed: () => context.push('/profile'),
+          ),
+        ],
+        bottom: TabBar(
           controller: _tabs,
-          children: const [
-            _RecipeList(),
-            _ScheduleList(),
+          tabs: const [
+            Tab(text: 'Recipes'),
+            Tab(text: 'Schedules'),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _tabs.index == 0
-              ? context.push('/recipe/new')
-              : context.push('/schedule/new'),
-          icon: const Icon(Icons.add),
-          label: Text(_tabs.index == 0 ? 'New Recipe' : 'New Schedule'),
-        ),
+      ),
+      body: TabBarView(
+        controller: _tabs,
+        children: const [
+          _RecipeList(),
+          _ScheduleList(),
+        ],
       ),
     );
   }
@@ -161,10 +167,11 @@ class _RecipeListState extends ConsumerState<_RecipeList> {
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade400,
-                    borderRadius: BorderRadius.circular(12),
+                    color: Theme.of(context).colorScheme.error,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Icon(Icons.delete_outline, color: Colors.white),
+                  child: Icon(Icons.delete_outline,
+                      color: Theme.of(context).colorScheme.onError),
                 ),
                 onDismissed: (_) => _dismissRecipe(recipe),
                 child: _RecipeCard(
@@ -191,7 +198,7 @@ class _RecipeListState extends ConsumerState<_RecipeList> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError),
             onPressed: () async {
               Navigator.pop(ctx);
               try {
@@ -219,79 +226,90 @@ class _RecipeCard extends StatelessWidget {
   final RecipeSummary recipe;
   final VoidCallback onDelete;
 
-  Color _statusColor(String s) => switch (s) {
-        'Testing' => Colors.orange,
-        'Tested'  => Colors.green,
-        _         => Colors.transparent,
-      };
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final sc = statusColor(recipe.status);
 
     return Card(
-      child: ListTile(
-        leading: recipe.imageUrl.isNotEmpty
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.network(recipe.imageUrl,
-                    width: 48,
-                    height: 48,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const _RecipeIcon()),
-              )
-            : const _RecipeIcon(),
-        title: Text(recipe.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Wrap(
-          spacing: 6,
-          runSpacing: 2,
-          children: [
-            if (recipe.cone.isNotEmpty)
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.change_history,
-                    size: 12, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 2),
-                Text(recipe.cone,
-                    style: Theme.of(context).textTheme.bodySmall),
-              ]),
-            if (recipe.firingType.isNotEmpty)
-              Text(recipe.firingType,
-                  style: Theme.of(context).textTheme.bodySmall),
-            if (recipe.status != 'New')
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: _statusColor(recipe.status).withAlpha(35),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color:
-                          _statusColor(recipe.status).withAlpha(140)),
-                ),
-                child: Text(recipe.status,
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: _statusColor(recipe.status))),
-              ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (recipe.isPublic)
-              const Padding(
-                padding: EdgeInsets.only(right: 4),
-                child: Icon(Icons.public, size: 16, color: Colors.green),
-              ),
-            if (recipe.revisionCount > 1)
-              Text('v${recipe.revisionCount}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () => context.push('/recipe/${recipe.id}'),
         onLongPress: onDelete,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              recipe.imageUrl.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(recipe.imageUrl,
+                          width: 52,
+                          height: 52,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const _RecipeIcon()),
+                    )
+                  : const _RecipeIcon(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(recipe.name,
+                        style: Theme.of(context).textTheme.titleSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (recipe.cone.isNotEmpty)
+                          Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.change_history,
+                                size: 11, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 2),
+                            Text('Cone ${recipe.cone}',
+                                style: Theme.of(context).textTheme.bodySmall),
+                          ]),
+                        if (recipe.firingType.isNotEmpty)
+                          Text(recipe.firingType,
+                              style: Theme.of(context).textTheme.bodySmall),
+                        if (recipe.finish.isNotEmpty)
+                          _AttrPill(label: recipe.finish),
+                        if (recipe.surface.isNotEmpty)
+                          _AttrPill(label: recipe.surface),
+                        if (recipe.transparency.isNotEmpty)
+                          _AttrPill(label: recipe.transparency),
+                        ...recipe.color.map((c) => _AttrPill(label: c)),
+                        if (recipe.status != 'New')
+                          _StatusPill(label: recipe.status, color: sc),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (recipe.isPublic)
+                    Icon(Icons.public, size: 15, color: scheme.primary),
+                  if (recipe.revisionCount > 1) ...[
+                    const SizedBox(height: 2),
+                    Text('v${recipe.revisionCount}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant)),
+                  ],
+                ],
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -300,16 +318,26 @@ class _RecipeCard extends StatelessWidget {
 class _RecipeIcon extends StatelessWidget {
   const _RecipeIcon();
   @override
-  Widget build(BuildContext context) => Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(6),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primaryContainer,
+            scheme.primaryContainer.withValues(alpha: 0.55),
+          ],
         ),
-        child: Icon(Icons.science_outlined,
-            color: Theme.of(context).colorScheme.onPrimaryContainer),
-      );
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(Icons.science_outlined,
+          color: scheme.onPrimaryContainer, size: 26),
+    );
+  }
 }
 
 // ── Schedule list tab ─────────────────────────────────────────────────────────
@@ -396,10 +424,11 @@ class _ScheduleListState extends ConsumerState<_ScheduleList> {
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade400,
-                    borderRadius: BorderRadius.circular(12),
+                    color: Theme.of(context).colorScheme.error,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Icon(Icons.delete_outline, color: Colors.white),
+                  child: Icon(Icons.delete_outline,
+                      color: Theme.of(context).colorScheme.onError),
                 ),
                 onDismissed: (_) => _dismissSchedule(schedule),
                 child: _ScheduleCard(
@@ -426,7 +455,7 @@ class _ScheduleListState extends ConsumerState<_ScheduleList> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError),
             onPressed: () async {
               Navigator.pop(ctx);
               try {
@@ -456,48 +485,127 @@ class _ScheduleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final subtitle = [
       if (schedule.maxCone.isNotEmpty) 'Cone ${schedule.maxCone}',
       '°${schedule.tempScale}',
     ].join(' · ');
 
     return Card(
-      child: ListTile(
-        leading: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(Icons.local_fire_department_outlined,
-              color: Theme.of(context).colorScheme.onSecondaryContainer),
-        ),
-        title: Text(schedule.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (schedule.isPublic)
-              const Padding(
-                padding: EdgeInsets.only(right: 4),
-                child: Icon(Icons.public, size: 16, color: Colors.green),
-              ),
-            if (schedule.revisionCount > 1)
-              Text('v${schedule.revisionCount}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () => context.push('/schedule/${schedule.id}'),
         onLongPress: onDelete,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      scheme.secondaryContainer,
+                      scheme.secondaryContainer.withValues(alpha: 0.55),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.local_fire_department_outlined,
+                    color: scheme.onSecondaryContainer, size: 26),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(schedule.name,
+                        style: Theme.of(context).textTheme.titleSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text(subtitle,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (schedule.isPublic)
+                    Icon(Icons.public, size: 15, color: scheme.primary),
+                  if (schedule.revisionCount > 1) ...[
+                    const SizedBox(height: 2),
+                    Text('v${schedule.revisionCount}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant)),
+                  ],
+                ],
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
 // ── Shared widgets ────────────────────────────────────────────────────────────
+
+class _AttrPill extends StatelessWidget {
+  const _AttrPill({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.4), width: 0.8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      );
+}
 
 class _EmptyView extends StatelessWidget {
   const _EmptyView(
@@ -507,19 +615,32 @@ class _EmptyView extends StatelessWidget {
   final String hint;
 
   @override
-  Widget build(BuildContext context) => Center(
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
+            Icon(icon,
+                size: 64,
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.35)),
+            const SizedBox(height: 20),
             Text(label,
-                style: const TextStyle(fontSize: 16, color: Colors.grey)),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: scheme.onSurfaceVariant),
+                textAlign: TextAlign.center),
             const SizedBox(height: 8),
-            Text(hint, style: const TextStyle(color: Colors.grey)),
+            Text(hint,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.7)),
+                textAlign: TextAlign.center),
           ],
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _ErrorView extends StatelessWidget {
@@ -528,16 +649,24 @@ class _ErrorView extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => Center(
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 48),
+            Icon(Icons.error_outline, size: 48, color: scheme.error),
             const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 16),
             FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
-      );
+      ),
+    );
+  }
 }

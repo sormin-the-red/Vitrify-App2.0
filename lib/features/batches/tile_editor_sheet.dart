@@ -253,10 +253,12 @@ class _TileEditorSheetState extends ConsumerState<TileEditorSheet> {
                 // ── Temperature ───────────────────────────────────────────────
                 TextField(
                   controller: _tempCtrl,
+                  maxLength: 20,
                   decoration: const InputDecoration(
                     labelText: 'Temperature (optional)',
                     hintText: 'e.g. 2300°F or 1260°C',
                     border: OutlineInputBorder(),
+                    counterText: '',
                   ),
                 ),
 
@@ -479,11 +481,16 @@ class _LayerEditorCard extends StatelessWidget {
                               style: const TextStyle(
                                   fontSize: 14, fontWeight: FontWeight.w500)),
                           GestureDetector(
-                            onTap: () {
-                              state.coatCtrl.text = '${coats + 1}';
-                              onChanged();
-                            },
-                            child: const Icon(Icons.add, size: 16),
+                            onTap: coats < 20
+                                ? () {
+                                    state.coatCtrl.text = '${coats + 1}';
+                                    onChanged();
+                                  }
+                                : null,
+                            child: Icon(Icons.add, size: 16,
+                                color: coats < 20
+                                    ? null
+                                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
                           ),
                         ],
                       ),

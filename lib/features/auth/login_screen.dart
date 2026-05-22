@@ -1,4 +1,3 @@
-import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,11 +15,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _loading = false;
   String? _error;
 
-  Future<void> _signInWithSocial(AuthProvider provider) async {
-    setState(() { _loading = true; _error = null; });
+  Future<void> _signInWithSocial(String provider) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       await ref.read(authNotifierProvider.notifier).signInWithSocial(provider);
-      // Auth state change triggers router redirect automatically
+      // On web, signInWithWebUI navigates the page to Cognito hosted UI, so
+      // this line and the finally block run briefly before the page unloads.
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -65,7 +68,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     icon: _GoogleIcon(),
                     onPressed: _loading
                         ? null
-                        : () => _signInWithSocial(AuthProvider.google),
+                        : () => _signInWithSocial('Google'),
                   ),
                   const SizedBox(height: 12),
                   _SocialButton(
@@ -74,7 +77,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         color: Color(0xFF1877F2), size: 20),
                     onPressed: _loading
                         ? null
-                        : () => _signInWithSocial(AuthProvider.facebook),
+                        : () => _signInWithSocial('Facebook'),
                   ),
                   const SizedBox(height: 12),
                   _SocialButton(

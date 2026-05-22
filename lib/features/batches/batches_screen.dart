@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/auth/auth_gate.dart';
 import '../../core/settings/settings_provider.dart';
 import 'batch_models.dart';
 import 'batches_repository.dart';
@@ -12,24 +11,30 @@ class BatchesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return AuthGate(
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Test Batches'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: () => context.push('/settings'),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Test Batches'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: FilledButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('New Batch'),
+              onPressed: () => _showCreateDialog(context, ref),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                visualDensity: VisualDensity.compact,
+              ),
             ),
-          ],
-        ),
-        body: const _BatchList(),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _showCreateDialog(context, ref),
-          icon: const Icon(Icons.add),
-          label: const Text('New Batch'),
-        ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.push('/settings'),
+          ),
+        ],
       ),
+      body: const _BatchList(),
     );
   }
 
@@ -183,32 +188,74 @@ class _BatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final subtitle = [
       if (batch.cone != null) 'Cone ${batch.cone}',
       if (batch.firingType != null) batch.firingType!,
     ].join(' · ');
 
     return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          child: Text('${batch.tileCount}',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-        ),
-        title: Text(batch.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${batch.tileCount} tile${batch.tileCount == 1 ? '' : 's'}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () => context.push('/batches/${batch.id}'),
         onLongPress: () => _confirmDelete(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      scheme.tertiaryContainer,
+                      scheme.tertiaryContainer.withValues(alpha: 0.55),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    '${batch.tileCount}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onTertiaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(batch.name,
+                        style: Theme.of(context).textTheme.titleSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(subtitle,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${batch.tileCount} tile${batch.tileCount == 1 ? '' : 's'}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -222,7 +269,7 @@ class _BatchCard extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError),
             onPressed: () async {
               Navigator.pop(ctx);
               try {

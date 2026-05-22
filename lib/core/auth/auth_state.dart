@@ -1,4 +1,4 @@
-import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'glaze_user.dart';
 
 sealed class AuthState {
   const AuthState();
@@ -9,7 +9,7 @@ final class AuthLoading extends AuthState {
 }
 
 final class AuthAuthenticated extends AuthState {
-  final AuthUser user;
+  final GlazeUser user;
   const AuthAuthenticated(this.user);
 }
 

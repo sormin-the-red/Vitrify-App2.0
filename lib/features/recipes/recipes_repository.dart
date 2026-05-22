@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/network/api_client.dart';
@@ -51,6 +52,10 @@ class RecipesRepository {
     String? firingType,
     String? notes,
     bool isPublic = false,
+    List<String> color = const [],
+    String? finish,
+    String? surface,
+    String? transparency,
     List<RecipeIngredient> materials = const [],
     List<String> imageUrls = const [],
     String status = 'New',
@@ -62,9 +67,14 @@ class RecipesRepository {
       'firingType': ?firingType,
       'notes': ?notes,
       'public': isPublic,
+      if (color.isNotEmpty) 'color': color,
+      'finish': ?finish,
+      'surface': ?surface,
+      'transparency': ?transparency,
       'revision': {
         'materials': materials.map((m) => m.toJson()).toList(),
         'imageUrls': imageUrls,
+        'notes': notes,
         'status': status,
       },
     });
@@ -109,6 +119,10 @@ class RecipesRepository {
     String? firingType,
     String? notes,
     bool isPublic = false,
+    List<String> color = const [],
+    String? finish,
+    String? surface,
+    String? transparency,
     required List<RecipeIngredient> materials,
     List<String> imageUrls = const [],
     String status = 'New',
@@ -120,6 +134,10 @@ class RecipesRepository {
       'firingType': ?firingType,
       'notes': ?notes,
       'public': isPublic,
+      if (color.isNotEmpty) 'color': color,
+      'finish': ?finish,
+      'surface': ?surface,
+      'transparency': ?transparency,
       'materials': materials.map((m) => m.toJson()).toList(),
       'imageUrls': imageUrls,
       'status': status,
@@ -135,6 +153,10 @@ class RecipesRepository {
     String? firingType,
     String? notes,
     bool isPublic = false,
+    List<String> color = const [],
+    String? finish,
+    String? surface,
+    String? transparency,
     required List<RecipeIngredient> materials,
     List<String> imageUrls = const [],
     String status = 'New',
@@ -146,6 +168,10 @@ class RecipesRepository {
       'firingType': ?firingType,
       'notes': ?notes,
       'public': isPublic,
+      if (color.isNotEmpty) 'color': color,
+      'finish': ?finish,
+      'surface': ?surface,
+      'transparency': ?transparency,
       'materials': materials.map((m) => m.toJson()).toList(),
       'imageUrls': imageUrls,
       'status': status,
@@ -158,19 +184,30 @@ class RecipesRepository {
     if (res.statusCode != 200) throw Exception('Failed to delete recipe');
   }
 
+  Future<void> deleteRevision(String id, int revNum) async {
+    final res = await _api.delete('/recipes/$id/revisions/$revNum');
+    if (res.statusCode != 200) throw Exception('Failed to delete revision');
+  }
+
   Future<String> duplicateRecipe(String id) async {
     final detail = await getRecipe(id);
     final mats   = detail.revision?.materials ?? [];
+    final revNotes = detail.revision?.notes ?? '';
+    final notes = revNotes.isNotEmpty ? revNotes : detail.notes;
     return createRecipe(
-      name: '${detail.name} (Copy)',
-      description: detail.description.isEmpty ? null : detail.description,
-      cone:        detail.cone.isEmpty ? null : detail.cone,
-      firingType:  detail.firingType.isEmpty ? null : detail.firingType,
-      notes:       detail.notes.isEmpty ? null : detail.notes,
-      isPublic:    false,
-      materials:   mats,
-      imageUrls:   detail.revision?.imageUrls ?? [],
-      status:      detail.revision?.status ?? 'New',
+      name:         '${detail.name} (Copy)',
+      description:  detail.description.isEmpty ? null : detail.description,
+      cone:         detail.cone.isEmpty ? null : detail.cone,
+      firingType:   detail.firingType.isEmpty ? null : detail.firingType,
+      notes:        notes.isEmpty ? null : notes,
+      isPublic:     false,
+      color:        detail.color,
+      finish:       detail.finish.isEmpty ? null : detail.finish,
+      surface:      detail.surface.isEmpty ? null : detail.surface,
+      transparency: detail.transparency.isEmpty ? null : detail.transparency,
+      materials:    mats,
+      imageUrls:    detail.revision?.imageUrls ?? [],
+      status:       detail.revision?.status ?? 'New',
     );
   }
 
@@ -197,12 +234,36 @@ class RecipesRepository {
   }
 
   Future<String> uploadImage(List<int> bytes, String mimeType) async {
-    final res = await _api.uploadBytes('/images', bytes, mimeType);
-    if (res.statusCode != 200) {
-      throw Exception('Image upload failed (${res.statusCode})');
+    // Step 1: get presigned S3 URL
+    final urlRes = await _api.post('/images/upload-url', body: {'contentType': mimeType});
+    if (urlRes.statusCode != 200) {
+      throw Exception('Failed to get upload URL (${urlRes.statusCode})');
     }
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    return body['url'] as String;
+    final urlBody = jsonDecode(urlRes.body) as Map<String, dynamic>;
+    final uploadUrl = urlBody['uploadUrl'] as String;
+    final key = urlBody['key'] as String;
+
+    // Step 2: PUT directly to S3 (presigned URL — no auth header)
+    final s3Res = await http.put(
+      Uri.parse(uploadUrl),
+      headers: {'Content-Type': mimeType},
+      body: bytes,
+    );
+    if (s3Res.statusCode != 200) {
+      throw Exception('S3 upload failed (${s3Res.statusCode})');
+    }
+
+    // Step 3: confirm upload + Rekognition moderation check
+    final confirmRes = await _api.post('/images/confirm', body: {'key': key});
+    if (confirmRes.statusCode == 422) {
+      final err = jsonDecode(confirmRes.body) as Map<String, dynamic>;
+      throw Exception(err['error'] ?? 'Image rejected by moderation');
+    }
+    if (confirmRes.statusCode != 200) {
+      throw Exception('Image confirmation failed (${confirmRes.statusCode})');
+    }
+    final confirmBody = jsonDecode(confirmRes.body) as Map<String, dynamic>;
+    return confirmBody['cdnUrl'] as String;
   }
 }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -676,7 +677,17 @@ class _SegmentModalState extends State<_SegmentModal> {
     final d = double.tryParse(v);
     if (d == null) return 'Invalid number';
     if (d <= 0) return 'Must be > 0';
+    if (d > 9999) return 'Max 9999°/hr';
     if (d != d.roundToDouble()) return 'Whole numbers only';
+    return null;
+  }
+
+  String? _validateHold(String? v) {
+    if (v == null || v.trim().isEmpty) return null;
+    final d = double.tryParse(v);
+    if (d == null) return 'Invalid number';
+    if (d < 0) return 'Must be ≥ 0';
+    if (d > 1440) return 'Max 1440 min (24 hrs)';
     return null;
   }
 
@@ -749,12 +760,20 @@ class _SegmentModalState extends State<_SegmentModal> {
                           ctrl: _lowCtrl,
                           label: 'From °${widget.scale}',
                           validator: _validateTemp,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                            LengthLimitingTextInputFormatter(7),
+                          ],
                         ),
                       const SizedBox(width: 8),
                       _ModalField(
                         ctrl: _highCtrl,
                         label: 'To °${widget.scale}',
                         validator: _validateHighTemp,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                          LengthLimitingTextInputFormatter(7),
+                        ],
                       ),
                     ]),
                     const SizedBox(height: 8),
@@ -763,10 +782,23 @@ class _SegmentModalState extends State<_SegmentModal> {
                         ctrl: _rateCtrl,
                         label: 'Rate/hr °${widget.scale}',
                         validator: _validateRate,
-                        keyboardType: TextInputType.numberWithOptions(decimal: false),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
+                        ],
                       ),
                       const SizedBox(width: 8),
-                      _ModalField(ctrl: _holdCtrl, label: 'Hold (min)'),
+                      _ModalField(
+                        ctrl: _holdCtrl,
+                        label: 'Hold (min)',
+                        validator: _validateHold,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
+                        ],
+                      ),
                     ]),
                     const SizedBox(height: 8),
                     TextFormField(
@@ -817,11 +849,13 @@ class _ModalField extends StatelessWidget {
     required this.label,
     this.validator,
     this.keyboardType = const TextInputType.numberWithOptions(decimal: true),
+    this.inputFormatters,
   });
   final TextEditingController ctrl;
   final String label;
   final String? Function(String?)? validator;
   final TextInputType keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) => Expanded(
@@ -834,6 +868,7 @@ class _ModalField extends StatelessWidget {
           ),
           keyboardType: keyboardType,
           validator: validator,
+          inputFormatters: inputFormatters,
         ),
       );
 }

@@ -59,6 +59,10 @@ class RecipeSummary {
   final String name;
   final String cone;
   final String firingType;
+  final List<String> color;
+  final String finish;
+  final String surface;
+  final String transparency;
   final bool isPublic;
   final int likeCount;
   final int revisionCount;
@@ -73,6 +77,10 @@ class RecipeSummary {
     required this.name,
     required this.cone,
     required this.firingType,
+    this.color = const [],
+    this.finish = '',
+    this.surface = '',
+    this.transparency = '',
     required this.isPublic,
     required this.likeCount,
     required this.revisionCount,
@@ -88,6 +96,10 @@ class RecipeSummary {
         name: j['name'] as String? ?? 'Untitled Recipe',
         cone: j['cone'] as String? ?? '',
         firingType: j['firingType'] as String? ?? '',
+        color: (j['color'] as List<dynamic>? ?? []).cast<String>(),
+        finish: j['finish'] as String? ?? '',
+        surface: j['surface'] as String? ?? '',
+        transparency: j['transparency'] as String? ?? '',
         isPublic: j['public'] as bool? ?? false,
         likeCount: (j['likeCount'] as num?)?.toInt() ?? 0,
         revisionCount: (j['revisionCount'] as num?)?.toInt() ?? 1,
@@ -110,6 +122,10 @@ class RecipeDetail extends RecipeSummary {
     required super.name,
     required super.cone,
     required super.firingType,
+    super.color,
+    super.finish,
+    super.surface,
+    super.transparency,
     required super.isPublic,
     required super.likeCount,
     required super.revisionCount,
@@ -125,6 +141,7 @@ class RecipeDetail extends RecipeSummary {
 
   RecipeDetail copyWith({RecipeRevision? revision}) => RecipeDetail(
         id: id, uid: uid, name: name, cone: cone, firingType: firingType,
+        color: color, finish: finish, surface: surface, transparency: transparency,
         isPublic: isPublic, likeCount: likeCount, revisionCount: revisionCount,
         imageUrl: imageUrl, status: status,
         dateCreated: dateCreated, dateModified: dateModified,
@@ -139,6 +156,10 @@ class RecipeDetail extends RecipeSummary {
         name: j['name'] as String? ?? 'Untitled Recipe',
         cone: j['cone'] as String? ?? '',
         firingType: j['firingType'] as String? ?? '',
+        color: (j['color'] as List<dynamic>? ?? []).cast<String>(),
+        finish: j['finish'] as String? ?? '',
+        surface: j['surface'] as String? ?? '',
+        transparency: j['transparency'] as String? ?? '',
         isPublic: j['public'] as bool? ?? false,
         likeCount: (j['likeCount'] as num?)?.toInt() ?? 0,
         revisionCount: (j['revisionCount'] as num?)?.toInt() ?? 1,

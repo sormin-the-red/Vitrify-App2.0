@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -48,6 +49,13 @@ const _cones = [
 const _firingTypes = [
   'Oxidation', 'Reduction', 'Neutral', 'Soda', 'Wood', 'Salt',
 ];
+const _colorOptions = [
+  'Clear', 'White', 'Cream', 'Yellow', 'Orange', 'Red',
+  'Pink', 'Purple', 'Blue', 'Teal', 'Green', 'Brown', 'Black', 'Gray',
+];
+const _finishOptions  = ['Glossy', 'Satin', 'Matte', 'Velvety', 'Dry'];
+const _surfaceOptions = ['Smooth', 'Textured', 'Speckled', 'Crawled', 'Crystalline', 'Variegated'];
+const _transparencyOptions = ['Transparent', 'Translucent', 'Semi-opaque', 'Opaque'];
 
 // Status configuration
 const _statuses = ['New', 'Testing', 'Tested'];
@@ -72,6 +80,10 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
   String? _cone;
   String? _firingType;
+  final List<String> _colors = [];
+  String? _finish;
+  String? _surface;
+  String? _transparency;
   bool _isPublic      = false;
   bool _saving        = false;
   bool _aiLoading     = false;
@@ -122,11 +134,16 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
     if (e != null) {
       _nameCtrl.text  = e.name;
       _descCtrl.text  = e.description;
-      _notesCtrl.text = e.notes;
-      _cone       = e.cone.isEmpty ? null : e.cone;
-      _firingType = e.firingType.isEmpty ? null : e.firingType;
-      _isPublic   = e.isPublic;
-      _status     = e.revision?.status ?? e.status;
+      final revNotes = e.revision?.notes ?? '';
+      _notesCtrl.text = revNotes.isNotEmpty ? revNotes : e.notes;
+      _cone         = e.cone.isEmpty ? null : e.cone;
+      _firingType   = e.firingType.isEmpty ? null : e.firingType;
+      _colors.addAll(e.color);
+      _finish       = e.finish.isEmpty ? null : e.finish;
+      _surface      = e.surface.isEmpty ? null : e.surface;
+      _transparency = e.transparency.isEmpty ? null : e.transparency;
+      _isPublic     = e.isPublic;
+      _status       = e.revision?.status ?? e.status;
       _imageUrls.addAll(e.revision?.imageUrls ?? []);
       for (final m in e.revision?.materials ?? []) {
         final s = _IngredientState.fromIngredient(m);
@@ -165,12 +182,12 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   Future<void> _generateAi() async {
     final name = _nameCtrl.text.trim();
     final desc = _descCtrl.text.trim();
-    if (name.isEmpty && desc.isEmpty) {
+    if (name.isEmpty || desc.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Enter a name or description first')));
+          content: Text('Enter both a name and description for best results')));
       return;
     }
-    final prompt = desc.isNotEmpty ? '$name $desc'.trim() : name;
+    final prompt = '$name $desc'.trim();
     setState(() => _aiLoading = true);
     try {
       final generated = await ref
@@ -206,6 +223,14 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
   }
 
   // ── Photo picker ─────────────────────────────────────────────────────────────
+
+  void _setImagePrimary(int index) {
+    if (index == 0) return;
+    setState(() {
+      final url = _imageUrls.removeAt(index);
+      _imageUrls.insert(0, url);
+    });
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     if (_imageUrls.length >= 5) return;
@@ -355,19 +380,28 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
         await repo.updateRevision(id, revNum,
             name: name, description: desc, cone: _cone,
             firingType: _firingType, notes: notes, isPublic: _isPublic,
+            color: _colors, finish: _finish, surface: _surface,
+            transparency: _transparency,
             materials: materials, imageUrls: _imageUrls, status: _status);
         ref.invalidate(recipeDetailProvider(id));
         ref.invalidate(recipeRevisionsProvider(id));
         ref.invalidate(recipesListProvider);
-        if (mounted) context.pop();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Saved!'), duration: Duration(seconds: 2)));
+        }
       } else {
         final id = await repo.createRecipe(
           name: name, description: desc, cone: _cone,
           firingType: _firingType, notes: notes, isPublic: _isPublic,
+          color: _colors, finish: _finish, surface: _surface,
+          transparency: _transparency,
           materials: materials, imageUrls: _imageUrls, status: _status,
         );
         ref.invalidate(recipesListProvider);
-        if (mounted) context.pushReplacement('/recipe/$id');
+        if (!mounted) return;
+        final detail = await repo.getRecipe(id);
+        if (mounted) context.pushReplacement('/recipe/$id/edit', extra: detail);
       }
     } catch (e) {
       if (mounted) {
@@ -386,19 +420,41 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           .showSnackBar(const SnackBar(content: Text('Name is required')));
       return;
     }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create New Revision?'),
+        content: const Text(
+            'This creates a new version and preserves the current one in history.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Create Revision')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     setState(() => _saving = true);
     try {
-      final id       = widget.existing!.id;
-      final desc     = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
-      final notes    = _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
-      await ref.read(recipesRepositoryProvider).createRevision(id,
+      final repo  = ref.read(recipesRepositoryProvider);
+      final id    = widget.existing!.id;
+      final desc  = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
+      final notes = _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
+      await repo.createRevision(id,
           name: name, description: desc, cone: _cone,
           firingType: _firingType, notes: notes, isPublic: _isPublic,
+          color: _colors, finish: _finish, surface: _surface,
+          transparency: _transparency,
           materials: _builtIngredients, imageUrls: _imageUrls, status: _status);
       ref.invalidate(recipeDetailProvider(id));
       ref.invalidate(recipeRevisionsProvider(id));
       ref.invalidate(recipesListProvider);
-      if (mounted) context.pop();
+      if (!mounted) return;
+      final detail = await repo.getRecipe(id);
+      if (mounted) context.pushReplacement('/recipe/$id/edit', extra: detail);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -424,8 +480,9 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        titleTextStyle: Theme.of(context).textTheme.titleMedium,
         title: Text(_isEdit
-            ? 'Edit Recipe${widget.existing?.revision != null ? "  ·  v${widget.existing!.revision!.revisionNum}" : ""}'
+            ? 'Edit Recipe${widget.existing?.revision != null ? " · v${widget.existing!.revision!.revisionNum}" : ""}'
             : 'New Recipe'),
         actions: [
           if (_aiLoading)
@@ -451,26 +508,13 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
                   child: CircularProgressIndicator(strokeWidth: 2)),
             )
           else ...[
-            TextButton(onPressed: _save, child: const Text('Save')),
             if (_isEdit)
-              PopupMenuButton<_RecipeEditorAction>(
-                onSelected: (action) {
-                  if (action == _RecipeEditorAction.newRevision) {
-                    _saveAsNewRevision();
-                  }
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: _RecipeEditorAction.newRevision,
-                    child: ListTile(
-                      leading: Icon(Icons.fork_right_outlined),
-                      title: Text('Save as New Revision'),
-                      contentPadding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ],
+              IconButton(
+                icon: const Icon(Icons.fork_right_outlined),
+                tooltip: 'Create new revision',
+                onPressed: _saveAsNewRevision,
               ),
+            TextButton(onPressed: _save, child: const Text('Save')),
           ],
         ],
       ),
@@ -560,6 +604,75 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             contentPadding: EdgeInsets.zero,
           ),
 
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 12),
+
+          // ── Glaze attributes ───────────────────────────────────────────────
+          InkWell(
+            onTap: () async {
+              final result = await showDialog<List<String>>(
+                context: context,
+                builder: (_) => _ColorPickerDialog(initial: _colors),
+              );
+              if (result != null) setState(() { _colors
+                ..clear()
+                ..addAll(result); });
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Color',
+                border: OutlineInputBorder(),
+                isDense: true,
+                suffixIcon: Icon(Icons.arrow_drop_down),
+              ),
+              child: Text(
+                _colors.isEmpty ? 'None' : _colors.join(', '),
+                style: _colors.isEmpty
+                    ? TextStyle(color: scheme.onSurfaceVariant)
+                    : null,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: () async {
+              final result = await showDialog<({String? finish, String? surface, String? transparency})>(
+                context: context,
+                builder: (_) => _GlazeAttrsDialog(
+                    finish: _finish, surface: _surface, transparency: _transparency),
+              );
+              if (result != null) setState(() {
+                _finish       = result.finish;
+                _surface      = result.surface;
+                _transparency = result.transparency;
+              });
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Finish / Surface / Transparency',
+                border: OutlineInputBorder(),
+                isDense: true,
+                suffixIcon: Icon(Icons.arrow_drop_down),
+              ),
+              child: Builder(builder: (context) {
+                final parts = [
+                  if (_finish != null) _finish!,
+                  if (_surface != null) _surface!,
+                  if (_transparency != null) _transparency!,
+                ];
+                return Text(
+                  parts.isEmpty ? 'None' : parts.join(' · '),
+                  style: parts.isEmpty
+                      ? TextStyle(color: scheme.onSurfaceVariant)
+                      : null,
+                );
+              }),
+            ),
+          ),
+
           const SizedBox(height: 8),
           const Divider(),
           const SizedBox(height: 12),
@@ -570,6 +683,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             uploading: _uploadingImage,
             onAdd: _imageUrls.length < 5 ? _showImageSourceSheet : null,
             onRemove: (i) => setState(() => _imageUrls.removeAt(i)),
+            onSetPrimary: _setImagePrimary,
           ),
 
           const SizedBox(height: 8),
@@ -728,11 +842,13 @@ class _PhotoSection extends StatelessWidget {
     required this.uploading,
     required this.onAdd,
     required this.onRemove,
+    required this.onSetPrimary,
   });
   final List<String> urls;
   final bool uploading;
   final VoidCallback? onAdd;
   final void Function(int index) onRemove;
+  final void Function(int index) onSetPrimary;
 
   @override
   Widget build(BuildContext context) {
@@ -778,6 +894,7 @@ class _PhotoSection extends StatelessWidget {
                             color: Colors.grey.shade200,
                             child: const Icon(Icons.broken_image_outlined))),
                   ),
+                  // Remove button
                   Positioned(
                     top: 2,
                     right: 2,
@@ -791,6 +908,28 @@ class _PhotoSection extends StatelessWidget {
                         padding: const EdgeInsets.all(2),
                         child: const Icon(Icons.close,
                             size: 14, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  // Primary badge / set-primary button
+                  Positioned(
+                    bottom: 2,
+                    left: 2,
+                    child: GestureDetector(
+                      onTap: i == 0 ? null : () => onSetPrimary(i),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: i == 0
+                              ? Colors.amber.withAlpha(200)
+                              : Colors.black45,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(3),
+                        child: Icon(
+                          i == 0 ? Icons.star : Icons.star_border,
+                          size: 13,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -887,6 +1026,10 @@ class _IngredientRow extends StatelessWidget {
               ),
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                LengthLimitingTextInputFormatter(6),
+              ],
               onTap: () => state.pctCtrl.selection = TextSelection(
                   baseOffset: 0,
                   extentOffset: state.pctCtrl.text.length),
@@ -939,6 +1082,12 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
   void _confirm() {
     final pct = double.tryParse(_amountCtrl.text) ?? 0;
     if (_selected == null || pct <= 0) return;
+    if (pct > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Percentage cannot exceed 100%')),
+      );
+      return;
+    }
     Navigator.of(context).pop(_PickerResult(_selected!, pct));
   }
 
@@ -1096,6 +1245,10 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
                     ),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      LengthLimitingTextInputFormatter(6),
+                    ],
                     onTap: () => _amountCtrl.selection = TextSelection(
                         baseOffset: 0,
                         extentOffset: _amountCtrl.text.length),
@@ -1106,7 +1259,8 @@ class _MaterialPickerSheetState extends ConsumerState<_MaterialPickerSheet> {
                 const SizedBox(width: 12),
                 FilledButton(
                   onPressed: _selected != null &&
-                          (double.tryParse(_amountCtrl.text) ?? 0) > 0
+                          (double.tryParse(_amountCtrl.text) ?? 0) > 0 &&
+                          (double.tryParse(_amountCtrl.text) ?? 0) <= 100
                       ? _confirm
                       : null,
                   child: const Text('Add'),
@@ -1336,4 +1490,135 @@ class _ManualEntryFallbackState extends State<_ManualEntryFallback> {
   }
 }
 
-enum _RecipeEditorAction { newRevision }
+// ── Glaze attributes dialog (finish / surface / transparency) ─────────────────
+
+class _GlazeAttrsDialog extends StatefulWidget {
+  const _GlazeAttrsDialog({this.finish, this.surface, this.transparency});
+  final String? finish;
+  final String? surface;
+  final String? transparency;
+
+  @override
+  State<_GlazeAttrsDialog> createState() => _GlazeAttrsDialogState();
+}
+
+class _GlazeAttrsDialogState extends State<_GlazeAttrsDialog> {
+  String? _finish;
+  String? _surface;
+  String? _transparency;
+
+  @override
+  void initState() {
+    super.initState();
+    _finish       = widget.finish;
+    _surface      = widget.surface;
+    _transparency = widget.transparency;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Glaze Properties'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<String>(
+            value: _finishOptions.contains(_finish) ? _finish : null,
+            hint: const Text('Finish'),
+            decoration: const InputDecoration(
+                labelText: 'Finish', border: OutlineInputBorder(), isDense: true),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('—')),
+              ..._finishOptions.map((f) => DropdownMenuItem(value: f, child: Text(f))),
+            ],
+            onChanged: (v) => setState(() => _finish = v),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _surfaceOptions.contains(_surface) ? _surface : null,
+            hint: const Text('Surface'),
+            decoration: const InputDecoration(
+                labelText: 'Surface', border: OutlineInputBorder(), isDense: true),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('—')),
+              ..._surfaceOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))),
+            ],
+            onChanged: (v) => setState(() => _surface = v),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _transparencyOptions.contains(_transparency) ? _transparency : null,
+            hint: const Text('Transparency'),
+            decoration: const InputDecoration(
+                labelText: 'Transparency', border: OutlineInputBorder(), isDense: true),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('—')),
+              ..._transparencyOptions.map((t) => DropdownMenuItem(value: t, child: Text(t))),
+            ],
+            onChanged: (v) => setState(() => _transparency = v),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: () => Navigator.pop(
+                context,
+                (finish: _finish, surface: _surface, transparency: _transparency)),
+            child: const Text('Done')),
+      ],
+    );
+  }
+}
+
+// ── Color picker dialog ───────────────────────────────────────────────────────
+
+class _ColorPickerDialog extends StatefulWidget {
+  const _ColorPickerDialog({required this.initial});
+  final List<String> initial;
+
+  @override
+  State<_ColorPickerDialog> createState() => _ColorPickerDialogState();
+}
+
+class _ColorPickerDialogState extends State<_ColorPickerDialog> {
+  late final List<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = List<String>.from(widget.initial);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Color'),
+      content: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: _colorOptions.map((c) {
+          final sel = _selected.contains(c);
+          return FilterChip(
+            label: Text(c),
+            selected: sel,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => setState(() {
+              if (sel) _selected.remove(c); else _selected.add(c);
+            }),
+          );
+        }).toList(),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: () => Navigator.pop(context, _selected),
+            child: const Text('Done')),
+      ],
+    );
+  }
+}

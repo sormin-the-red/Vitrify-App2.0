@@ -2,17 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app.dart' show statusColor, kColorPass, kColorFail, kColorTesting;
 import '../../core/chemistry/umf_calculator.dart';
 import '../../core/materials/materials_repository.dart';
+import '../mixes/mix_models.dart';
+import '../mixes/mix_setup_sheet.dart';
+import '../mixes/mixes_repository.dart';
 import 'recipe_models.dart';
 import 'recipes_repository.dart';
-
-// Status display config
-Color _statusColor(String status) => switch (status) {
-      'Testing' => Colors.orange,
-      'Tested'  => Colors.green,
-      _         => Colors.grey,
-    };
 
 class RecipeDetailScreen extends ConsumerWidget {
   const RecipeDetailScreen({super.key, required this.recipeId});
@@ -67,6 +64,22 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
 
   double? get _batchGrams => double.tryParse(_scaleCtrl.text);
 
+  void _showMixSetup() {
+    final revision = _revision;
+    if (revision == null || revision.materials.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Add ingredients before mixing.')));
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) =>
+          MixSetupSheet(recipe: widget.recipe, revision: revision),
+    );
+  }
+
   void _openEditor(RecipeRevision? targetRevision) {
     final recipe = widget.recipe;
     final editTarget = (targetRevision != null && targetRevision != recipe.revision)
@@ -101,8 +114,24 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
           Navigator.pop(ctx);
           _openEditor(rev);
         },
+        onDelete: _deleteLatestRevision,
       ),
     );
+  }
+
+  Future<void> _deleteLatestRevision(RecipeRevision rev) async {
+    try {
+      await ref.read(recipesRepositoryProvider).deleteRevision(widget.recipe.id, rev.revisionNum);
+      ref.invalidate(recipeDetailProvider(widget.recipe.id));
+      ref.invalidate(recipeRevisionsProvider(widget.recipe.id));
+      ref.invalidate(recipesListProvider);
+      if (mounted) setState(() => _selectedRevision = null);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 
   Future<void> _duplicateRecipe() async {
@@ -134,13 +163,19 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
 
     try {
       final revision = _revision;
+      final revNotes = revision?.notes ?? '';
+      final notesText = revNotes.isNotEmpty ? revNotes : recipe.notes;
       final newId = await ref.read(recipesRepositoryProvider).createRecipe(
         name: pickedName.isEmpty ? '${recipe.name} (Copy)' : pickedName,
         description: recipe.description.isEmpty ? null : recipe.description,
         cone: recipe.cone.isEmpty ? null : recipe.cone,
         firingType: recipe.firingType.isEmpty ? null : recipe.firingType,
-        notes: recipe.notes.isEmpty ? null : recipe.notes,
+        notes: notesText.isEmpty ? null : notesText,
         isPublic: false,
+        color: recipe.color,
+        finish: recipe.finish.isEmpty ? null : recipe.finish,
+        surface: recipe.surface.isEmpty ? null : recipe.surface,
+        transparency: recipe.transparency.isEmpty ? null : recipe.transparency,
         materials: revision?.materials ?? [],
         imageUrls: revision?.imageUrls ?? [],
         status: revision?.status ?? 'New',
@@ -172,45 +207,55 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
         : (recipe.imageUrl.isNotEmpty ? [recipe.imageUrl] : <String>[]);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(recipe.name),
-        actions: [
-          if (recipe.revisionCount > 1)
-            IconButton(
-              icon: const Icon(Icons.history),
-              tooltip: 'Version history',
-              onPressed: _showRevisionHistory,
-            ),
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () => _openEditor(_selectedRevision),
-          ),
-          PopupMenuButton<_DetailAction>(
-            onSelected: (action) {
-              switch (action) {
-                case _DetailAction.duplicate: _duplicateRecipe();
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: _DetailAction.duplicate,
-                child: ListTile(
-                  leading: Icon(Icons.copy_outlined),
-                  title: Text('Duplicate'),
-                  contentPadding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         onRefresh: () async =>
             ref.invalidate(recipeDetailProvider(recipe.id)),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-          children: [
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar.medium(
+              pinned: true,
+              title: Text(recipe.name),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Edit',
+                  onPressed: () => _openEditor(_selectedRevision),
+                ),
+                PopupMenuButton<_DetailAction>(
+                  onSelected: (action) {
+                    switch (action) {
+                      case _DetailAction.history:   _showRevisionHistory();
+                      case _DetailAction.duplicate: _duplicateRecipe();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    if (recipe.revisionCount > 1)
+                      const PopupMenuItem(
+                        value: _DetailAction.history,
+                        child: ListTile(
+                          leading: Icon(Icons.history_outlined),
+                          title: Text('Version history'),
+                          contentPadding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    const PopupMenuItem(
+                      value: _DetailAction.duplicate,
+                      child: ListTile(
+                        leading: Icon(Icons.copy_outlined),
+                        title: Text('Duplicate'),
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              sliver: SliverList.list(
+                children: [
             // ── Revision indicator ───────────────────────────────────────────
             if (_selectedRevision != null)
               Container(
@@ -259,6 +304,13 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
                       label: recipe.firingType,
                       icon: Icons.local_fire_department_outlined),
                 _StatusChip(status: status),
+                if (recipe.finish.isNotEmpty)
+                  _MetaChip(label: recipe.finish, icon: Icons.water_drop_outlined),
+                if (recipe.surface.isNotEmpty)
+                  _MetaChip(label: recipe.surface, icon: Icons.texture_outlined),
+                if (recipe.transparency.isNotEmpty)
+                  _MetaChip(label: recipe.transparency, icon: Icons.opacity_outlined),
+                ...recipe.color.map((c) => _MetaChip(label: c, icon: Icons.palette_outlined)),
                 if (recipe.isPublic)
                   _MetaChip(label: 'Public', icon: Icons.public),
                 if (recipe.revisionCount > 1)
@@ -274,7 +326,7 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
                   ),
                 if (recipe.likeCount > 0)
                   _MetaChip(
-                      label: '${recipe.likeCount} ♥',
+                      label: '${recipe.likeCount}',
                       icon: Icons.favorite_outline),
               ],
             ),
@@ -299,9 +351,10 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
                     '${basePct.toStringAsFixed(1)}%',
                     style: TextStyle(
                       color: (basePct - 100).abs() < 0.5
-                          ? Colors.green
-                          : Colors.orange,
-                      fontWeight: FontWeight.bold,
+                          ? statusColor('Tested')
+                          : statusColor('Testing'),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
                     ),
                   ),
                 const SizedBox(width: 8),
@@ -378,20 +431,44 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
             ],
 
             // ── Notes ─────────────────────────────────────────────────────────
-            if (recipe.notes.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Text('Notes', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(recipe.notes),
-            ],
-            if (revision != null && revision.notes.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text('Revision notes',
-                  style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 4),
-              Text(revision.notes,
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
+            Builder(builder: (context) {
+              final notesText = (revision != null && revision.notes.isNotEmpty)
+                  ? revision.notes
+                  : recipe.notes;
+              if (notesText.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 24),
+                  Text('Notes', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text(notesText),
+                ],
+              );
+            }),
+
+            // ── Mix Glaze ─────────────────────────────────────────────────────
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.scale_outlined, size: 18),
+                label: const Text('Mix Glaze'),
+                onPressed: baseMaterials.isEmpty ? null : _showMixSetup,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+
+            // ── Mix history ───────────────────────────────────────────────────
+            const SizedBox(height: 20),
+            _MixHistory(
+              recipeId: recipe.id,
+              revisionNum: revision?.revisionNum ?? recipe.revisionCount,
+            ),
 
             // ── UMF + Stull ───────────────────────────────────────────────────
             if (baseMaterials.isNotEmpty) ...[
@@ -401,7 +478,10 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
               _UmfSection(ingredients: baseMaterials),
             ],
 
-            const SizedBox(height: 32),
+                const SizedBox(height: 32),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -409,7 +489,7 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
   }
 }
 
-enum _DetailAction { duplicate }
+enum _DetailAction { history, duplicate }
 
 // ── Photo carousel ────────────────────────────────────────────────────────────
 
@@ -435,12 +515,26 @@ class _PhotoCarouselState extends State<_PhotoCarousel> {
             child: PageView.builder(
               itemCount: widget.urls.length,
               onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (context, i) => Image.network(
-                widget.urls[i],
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  color: Colors.grey.shade200,
-                  child: const Icon(Icons.broken_image_outlined, size: 48),
+              itemBuilder: (context, i) => GestureDetector(
+                onTap: () => showDialog<void>(
+                  context: context,
+                  barrierColor: Colors.black87,
+                  barrierDismissible: true,
+                  builder: (_) => Dialog.fullscreen(
+                    backgroundColor: Colors.transparent,
+                    child: _FullScreenGallery(
+                      urls: widget.urls,
+                      initialIndex: i,
+                    ),
+                  ),
+                ),
+                child: Image.network(
+                  widget.urls[i],
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.broken_image_outlined, size: 48),
+                  ),
                 ),
               ),
             ),
@@ -474,6 +568,98 @@ class _PhotoCarouselState extends State<_PhotoCarousel> {
   }
 }
 
+// ── Fullscreen image gallery ──────────────────────────────────────────────────
+
+class _FullScreenGallery extends StatefulWidget {
+  const _FullScreenGallery({required this.urls, required this.initialIndex});
+  final List<String> urls;
+  final int initialIndex;
+
+  @override
+  State<_FullScreenGallery> createState() => _FullScreenGalleryState();
+}
+
+class _FullScreenGalleryState extends State<_FullScreenGallery> {
+  late final PageController _ctrl;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _ctrl = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _ctrl,
+          itemCount: widget.urls.length,
+          onPageChanged: (i) => setState(() => _index = i),
+          itemBuilder: (context, i) => InteractiveViewer(
+            minScale: 0.8,
+            maxScale: 4.0,
+            child: Center(
+              child: Image.network(
+                widget.urls[i],
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const Icon(
+                  Icons.broken_image_outlined,
+                  size: 64,
+                  color: Colors.white54,
+                ),
+              ),
+            ),
+          ),
+        ),
+        SafeArea(
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black45,
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ),
+        ),
+        if (widget.urls.length > 1)
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_index + 1} / ${widget.urls.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 // ── Revision history sheet ─────────────────────────────────────────────────────
 
 class _RevisionHistorySheet extends StatefulWidget {
@@ -484,6 +670,7 @@ class _RevisionHistorySheet extends StatefulWidget {
     required this.latestRevisionNum,
     required this.onSelect,
     required this.onEdit,
+    required this.onDelete,
   });
   final List<RecipeRevision> embedded;
   final Future<List<RecipeRevision>>? future;
@@ -491,6 +678,7 @@ class _RevisionHistorySheet extends StatefulWidget {
   final int latestRevisionNum;
   final void Function(RecipeRevision) onSelect;
   final void Function(RecipeRevision) onEdit;
+  final void Function(RecipeRevision) onDelete;
 
   @override
   State<_RevisionHistorySheet> createState() => _RevisionHistorySheetState();
@@ -515,6 +703,30 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
         if (mounted) setState(() { _revisions = []; _loading = false; });
       });
     }
+  }
+
+  Future<void> _confirmDelete(RecipeRevision rev) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete v${rev.revisionNum}?'),
+        content: Text(
+            'This can\'t be undone. The recipe will revert to v${rev.revisionNum - 1}.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    widget.onDelete(rev);
+    if (mounted) Navigator.pop(context);
   }
 
   void _toggleCompare(int revNum) {
@@ -640,6 +852,18 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
                                           visualDensity:
                                               VisualDensity.compact,
                                         ),
+                                        if (isLatest && widget.latestRevisionNum > 1)
+                                          IconButton(
+                                            icon: Icon(
+                                                Icons.delete_outline,
+                                                size: 18,
+                                                color: Colors.red.shade300),
+                                            tooltip: 'Delete this revision',
+                                            onPressed: () =>
+                                                _confirmDelete(rev),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
                                       ],
                                     ),
                               onTap: _compareMode
@@ -748,13 +972,13 @@ class _DiffRowWidget extends StatelessWidget {
     String detail;
     switch (row.change) {
       case _Change.added:
-        bg = Colors.green.withAlpha(30);
+        bg = kColorPass.withValues(alpha: 0.12);
         detail = '+${row.bPct!.toStringAsFixed(1)}%';
       case _Change.removed:
-        bg = Colors.red.withAlpha(30);
+        bg = kColorFail.withValues(alpha: 0.12);
         detail = '−${row.aPct!.toStringAsFixed(1)}%';
       case _Change.changed:
-        bg = Colors.orange.withAlpha(30);
+        bg = kColorTesting.withValues(alpha: 0.12);
         final delta = row.bPct! - row.aPct!;
         detail = '${row.aPct!.toStringAsFixed(1)}% → ${row.bPct!.toStringAsFixed(1)}%'
             '  (${delta > 0 ? "+" : ""}${delta.toStringAsFixed(1)}%)';
@@ -775,6 +999,85 @@ class _DiffRowWidget extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ── Mix history ───────────────────────────────────────────────────────────────
+
+class _MixHistory extends ConsumerWidget {
+  const _MixHistory({required this.recipeId, required this.revisionNum});
+  final String recipeId;
+  final int revisionNum;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(recipeMixesProvider(recipeId));
+    return async.when(
+      loading: () => const SizedBox(
+          height: 32, child: Center(child: CircularProgressIndicator())),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (allMixes) {
+        final mixes = allMixes.where((m) => m.revisionNum == revisionNum).toList();
+        if (mixes.isEmpty) return const SizedBox.shrink();
+        final scheme = Theme.of(context).colorScheme;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Mix History',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            ...mixes.take(5).map((m) {
+              final isComplete = m.status == MixStatus.complete;
+              final label = _fmtBatch(m);
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: isComplete
+                      ? Colors.green.shade400.withValues(alpha: 0.15)
+                      : scheme.secondaryContainer,
+                  child: Icon(
+                    isComplete ? Icons.check : Icons.hourglass_top_outlined,
+                    size: 14,
+                    color: isComplete
+                        ? Colors.green.shade600
+                        : scheme.onSecondaryContainer,
+                  ),
+                ),
+                title: Text(label, style: const TextStyle(fontSize: 13)),
+                subtitle: Text(
+                  '${m.checkedCount} / ${m.totalCount} materials'
+                  '${isComplete ? " · complete" : ""}',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                trailing: isComplete
+                    ? null
+                    : TextButton(
+                        onPressed: () =>
+                            context.push('/mix/${m.id}'),
+                        style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero),
+                        child: const Text('Resume'),
+                      ),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+
+  String _fmtBatch(MixSummary m) {
+    final v = switch (m.displayUnit) {
+      'lbs' => (m.batchSizeGrams * 0.00220462).toStringAsFixed(1),
+      'kg'  => (m.batchSizeGrams / 1000).toStringAsFixed(2),
+      'oz'  => (m.batchSizeGrams * 0.035274).toStringAsFixed(0),
+      _     => m.batchSizeGrams.toStringAsFixed(0),
+    };
+    final date = m.dateCreated.length >= 10 ? m.dateCreated.substring(0, 10) : m.dateCreated;
+    return '$v ${m.displayUnit}  ·  $date';
   }
 }
 
@@ -1101,10 +1404,10 @@ class _IngredientRow extends StatelessWidget {
           Expanded(
             flex: 5,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
                 value: fraction.clamp(0.0, 1.0),
-                minHeight: 10,
+                minHeight: 12,
                 backgroundColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
               ),
@@ -1146,8 +1449,10 @@ class _ConeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Chip(
-        avatar: const Icon(Icons.change_history, size: 14),
-        label: Text(cone, style: const TextStyle(fontSize: 12)),
+        avatar: Icon(Icons.change_history, size: 13,
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        label: Text('Cone $cone',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
         visualDensity: VisualDensity.compact,
         padding: EdgeInsets.zero,
         labelPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1159,14 +1464,18 @@ class _StatusChip extends StatelessWidget {
   final String status;
 
   @override
-  Widget build(BuildContext context) => Chip(
-        label: Text(status, style: const TextStyle(fontSize: 12)),
-        backgroundColor: _statusColor(status).withAlpha(35),
-        side: BorderSide(color: _statusColor(status).withAlpha(140)),
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-      );
+  Widget build(BuildContext context) {
+    final c = statusColor(status);
+    return Chip(
+      label: Text(status),
+      backgroundColor: c.withValues(alpha: 0.12),
+      side: BorderSide(color: c.withValues(alpha: 0.4), width: 0.8),
+      labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+    );
+  }
 }
 
 class _MetaChip extends StatelessWidget {

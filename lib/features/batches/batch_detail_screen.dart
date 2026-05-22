@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app.dart' show kColorPass, kColorFail, kColorPromising, kColorInteresting, kColorProblematic;
 import 'batch_models.dart';
 import 'batches_repository.dart';
 import 'tile_editor_sheet.dart';
@@ -40,6 +41,21 @@ class _BatchDetailView extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(batch.name),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: FilledButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add Tile'),
+              onPressed: () => _addTile(context, ref),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         bottom: meta.isNotEmpty
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(24),
@@ -55,19 +71,30 @@ class _BatchDetailView extends ConsumerWidget {
             : null,
       ),
       body: batch.tiles.isEmpty
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.grid_view_outlined, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No tiles yet.', style: TextStyle(fontSize: 16, color: Colors.grey)),
-                  SizedBox(height: 8),
-                  Text('Tap + to add the first test tile.',
-                      style: TextStyle(color: Colors.grey)),
-                ],
+          ? Builder(builder: (context) => Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.grid_view_outlined, size: 64,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant
+                            .withValues(alpha: 0.35)),
+                    const SizedBox(height: 20),
+                    Text('No tiles yet.',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 8),
+                    Text('Tap + to add the first test tile.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.7)),
+                        textAlign: TextAlign.center),
+                  ],
+                ),
               ),
-            )
+            ))
           : RefreshIndicator(
               onRefresh: () async => ref.invalidate(batchDetailProvider(batch.id)),
               child: ListView.builder(
@@ -79,11 +106,6 @@ class _BatchDetailView extends ConsumerWidget {
                 ),
               ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _addTile(context, ref),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Tile'),
-      ),
     );
   }
 
@@ -268,17 +290,19 @@ class _OutcomeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (outcome) {
-      'Pass' => Colors.green,
-      'Fail' => Colors.red,
-      'Promising' => Colors.blue,
-      'Interesting' => Colors.purple,
-      'Problematic' => Colors.orange,
-      _ => Colors.grey,
+      'Pass'        => kColorPass,
+      'Fail'        => kColorFail,
+      'Promising'   => kColorPromising,
+      'Interesting' => kColorInteresting,
+      'Problematic' => kColorProblematic,
+      _             => const Color(0xFF8A8A8A),
     };
     return Chip(
-      label: Text(outcome, style: const TextStyle(fontSize: 11)),
-      backgroundColor: color.withValues(alpha: 0.15),
-      side: BorderSide(color: color.withValues(alpha: 0.4)),
+      label: Text(outcome),
+      labelStyle: TextStyle(
+          fontSize: 11, fontWeight: FontWeight.w600, color: color),
+      backgroundColor: color.withValues(alpha: 0.12),
+      side: BorderSide(color: color.withValues(alpha: 0.4), width: 0.8),
       padding: EdgeInsets.zero,
       labelPadding: const EdgeInsets.symmetric(horizontal: 6),
       visualDensity: VisualDensity.compact,

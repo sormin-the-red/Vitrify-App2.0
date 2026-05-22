@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/auth/auth_gate.dart';
 import '../../core/auth/auth_notifier.dart';
 import '../../core/auth/auth_state.dart';
 import 'community_models.dart';
@@ -112,9 +111,7 @@ class _FollowingTab extends StatelessWidget {
   const _FollowingTab();
 
   @override
-  Widget build(BuildContext context) {
-    return AuthGate(child: const _FollowingFeedContent());
-  }
+  Widget build(BuildContext context) => const _FollowingFeedContent();
 }
 
 class _FollowingFeedContent extends ConsumerWidget {
@@ -287,6 +284,15 @@ class _FeedCard extends ConsumerWidget {
     if (item.isRecipe && item.firingType != null &&
         item.firingType!.isNotEmpty) {
       chips.add(_MetaChip(label: item.firingType!, icon: null));
+    }
+    if (item.isRecipe && item.finish != null && item.finish!.isNotEmpty) {
+      chips.add(_MetaChip(label: item.finish!, icon: null));
+    }
+    if (item.isRecipe && item.surface != null && item.surface!.isNotEmpty) {
+      chips.add(_MetaChip(label: item.surface!, icon: null));
+    }
+    for (final c in item.color) {
+      chips.add(_MetaChip(label: c, icon: null));
     }
     return chips;
   }

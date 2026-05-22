@@ -8,7 +8,7 @@ import 'material_model.dart';
 
 part 'materials_repository.g.dart';
 
-const _cdnUrl   = 'https://d375nhmdwfih0k.cloudfront.net/materials/v1.json';
+const _cdnUrl   = 'https://dvzn9jjuyqawh.cloudfront.net/materials/v1.json';
 const _cacheKey = 'materials_cache_v1';
 const _etagKey  = 'materials_etag_v1';
 
