@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/auth_notifier.dart';
+import '../../core/auth/auth_state.dart';
 import '../recipes/recipes_repository.dart';
 import 'firing_chart.dart';
 import 'schedule_models.dart';
@@ -121,10 +123,12 @@ class _ScheduleViewState extends ConsumerState<_ScheduleView> {
           setState(() => _selectedRevision = rev);
           Navigator.pop(ctx);
         },
-        onEdit: (rev) {
-          Navigator.pop(ctx);
-          _openEditor(rev);
-        },
+        onEdit: isOwner
+            ? (rev) {
+                Navigator.pop(ctx);
+                _openEditor(rev);
+              }
+            : null,
       ),
     );
   }
@@ -184,6 +188,9 @@ class _ScheduleViewState extends ConsumerState<_ScheduleView> {
     final segments = revision?.segments ?? [];
     final scale    = schedule.tempScale;
     final scheme   = Theme.of(context).colorScheme;
+    final authState = ref.watch(authNotifierProvider);
+    final isOwner = authState is AuthAuthenticated &&
+        authState.user.userId == schedule.uid;
 
     return Scaffold(
       appBar: AppBar(
@@ -195,10 +202,11 @@ class _ScheduleViewState extends ConsumerState<_ScheduleView> {
               tooltip: 'Version history',
               onPressed: _showRevisionHistory,
             ),
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () => _openEditor(_selectedRevision),
-          ),
+          if (isOwner)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => _openEditor(_selectedRevision),
+            ),
           PopupMenuButton<_DetailAction>(
             onSelected: (action) {
               switch (action) {
@@ -422,14 +430,14 @@ class _RevisionHistorySheet extends StatefulWidget {
     required this.current,
     required this.latestRevisionNum,
     required this.onSelect,
-    required this.onEdit,
+    this.onEdit,
   });
   final List<ScheduleRevision> embedded;
   final Future<List<ScheduleRevision>>? future;
   final ScheduleRevision? current;
   final int latestRevisionNum;
   final void Function(ScheduleRevision) onSelect;
-  final void Function(ScheduleRevision) onEdit;
+  final void Function(ScheduleRevision)? onEdit;
 
   @override
   State<_RevisionHistorySheet> createState() => _RevisionHistorySheetState();
@@ -564,13 +572,16 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
                                           size: 20, color: Colors.grey)),
                               trailing: _compareMode
                                   ? null
-                                  : IconButton(
-                                      icon: const Icon(Icons.edit_outlined,
-                                          size: 18),
-                                      tooltip: 'Edit this version',
-                                      onPressed: () => widget.onEdit(rev),
-                                      visualDensity: VisualDensity.compact,
-                                    ),
+                                  : widget.onEdit != null
+                                      ? IconButton(
+                                          icon: const Icon(Icons.edit_outlined,
+                                              size: 18),
+                                          tooltip: 'Edit this version',
+                                          onPressed: () =>
+                                              widget.onEdit!(rev),
+                                          visualDensity: VisualDensity.compact,
+                                        )
+                                      : null,
                               onTap: _compareMode
                                   ? () => _toggleCompare(rev.revisionNum)
                                   : () => widget.onSelect(rev),

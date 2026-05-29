@@ -265,5 +265,47 @@ class _RecipeRevisionsProviderElement
   String get id => (origin as RecipeRevisionsProvider).id;
 }
 
+String _$favoriteRecipesListHash() =>
+    r'c5d6e1f2a3b4c5d6e1f2a3b4c5d6e1f2a3b4c5d6';
+
+/// See also [favoriteRecipesList].
+@ProviderFor(favoriteRecipesList)
+final favoriteRecipesListProvider =
+    AutoDisposeFutureProvider<List<RecipeSummary>>.internal(
+  favoriteRecipesList,
+  name: r'favoriteRecipesListProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$favoriteRecipesListHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef FavoriteRecipesListRef =
+    AutoDisposeFutureProviderRef<List<RecipeSummary>>;
+
+String _$recipesAndFavoritesListHash() =>
+    r'd6e1f2a3b4c5d6e1f2a3b4c5d6e1f2a3b4c5d6e1';
+
+/// See also [recipesAndFavoritesList].
+@ProviderFor(recipesAndFavoritesList)
+final recipesAndFavoritesListProvider =
+    AutoDisposeFutureProvider<List<RecipeSummary>>.internal(
+  recipesAndFavoritesList,
+  name: r'recipesAndFavoritesListProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$recipesAndFavoritesListHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef RecipesAndFavoritesListRef =
+    AutoDisposeFutureProviderRef<List<RecipeSummary>>;
+
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

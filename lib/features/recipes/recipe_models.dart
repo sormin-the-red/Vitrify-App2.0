@@ -115,6 +115,8 @@ class RecipeDetail extends RecipeSummary {
   final String notes;
   final RecipeRevision? revision;
   final List<RecipeRevision> revisions;
+  final String? duplicateOriginId;
+  final String? duplicateOriginName;
 
   const RecipeDetail({
     required super.id,
@@ -137,6 +139,8 @@ class RecipeDetail extends RecipeSummary {
     required this.notes,
     this.revision,
     this.revisions = const [],
+    this.duplicateOriginId,
+    this.duplicateOriginName,
   });
 
   RecipeDetail copyWith({RecipeRevision? revision}) => RecipeDetail(
@@ -148,6 +152,8 @@ class RecipeDetail extends RecipeSummary {
         description: description, notes: notes,
         revision: revision ?? this.revision,
         revisions: revisions,
+        duplicateOriginId: duplicateOriginId,
+        duplicateOriginName: duplicateOriginName,
       );
 
   factory RecipeDetail.fromJson(Map<String, dynamic> j) => RecipeDetail(
@@ -176,5 +182,7 @@ class RecipeDetail extends RecipeSummary {
             .whereType<Map<String, dynamic>>()
             .map(RecipeRevision.fromJson)
             .toList(),
+        duplicateOriginId: j['duplicateOriginId'] as String?,
+        duplicateOriginName: j['duplicateOriginName'] as String?,
       );
 }

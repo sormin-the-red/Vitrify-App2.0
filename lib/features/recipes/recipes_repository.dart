@@ -25,6 +25,19 @@ class RecipesRepository {
         .toList();
   }
 
+  Future<List<RecipeSummary>> listFavoriteRecipes() async {
+    final res = await _api.get('/recipes/favorites');
+    if (res.statusCode != 200) throw Exception('Failed to load favorites');
+    final body = jsonDecode(res.body);
+    final list = body is List
+        ? body
+        : (body as Map<String, dynamic>)['recipes'] as List? ?? [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(RecipeSummary.fromJson)
+        .toList();
+  }
+
   Future<RecipeDetail> getRecipe(String id) async {
     final res = await _api.get('/recipes/$id');
     if (res.statusCode != 200) throw Exception('Failed to load recipe');
@@ -59,6 +72,8 @@ class RecipesRepository {
     List<RecipeIngredient> materials = const [],
     List<String> imageUrls = const [],
     String status = 'New',
+    String? duplicateOriginId,
+    String? duplicateOriginName,
   }) async {
     final res = await _api.post('/recipes', body: {
       'name': name,
@@ -77,6 +92,8 @@ class RecipesRepository {
         'notes': notes,
         'status': status,
       },
+      'duplicateOriginId': ?duplicateOriginId,
+      'duplicateOriginName': ?duplicateOriginName,
     });
     if (res.statusCode != 201) throw Exception('Failed to create recipe');
     return (jsonDecode(res.body) as Map<String, dynamic>)['id'] as String;
@@ -283,3 +300,16 @@ Future<RecipeDetail> recipeDetail(RecipeDetailRef ref, String id) =>
 Future<List<RecipeRevision>> recipeRevisions(
         RecipeRevisionsRef ref, String id) =>
     ref.watch(recipesRepositoryProvider).listRevisions(id);
+
+@riverpod
+Future<List<RecipeSummary>> favoriteRecipesList(FavoriteRecipesListRef ref) =>
+    ref.watch(recipesRepositoryProvider).listFavoriteRecipes();
+
+@riverpod
+Future<List<RecipeSummary>> recipesAndFavoritesList(
+    RecipesAndFavoritesListRef ref) async {
+  final own = await ref.watch(recipesListProvider.future);
+  final favorites = await ref.watch(favoriteRecipesListProvider.future);
+  final ownIds = own.map((r) => r.id).toSet();
+  return [...own, ...favorites.where((r) => !ownIds.contains(r.id))];
+}

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app.dart' show statusColor, kColorPass, kColorFail, kColorTesting;
+import '../../core/auth/auth_notifier.dart';
+import '../../core/auth/auth_state.dart';
 import '../../core/chemistry/umf_calculator.dart';
 import '../../core/materials/materials_repository.dart';
 import '../mixes/mix_models.dart';
@@ -110,11 +112,13 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
           setState(() => _selectedRevision = rev);
           Navigator.pop(ctx);
         },
-        onEdit: (rev) {
-          Navigator.pop(ctx);
-          _openEditor(rev);
-        },
-        onDelete: _deleteLatestRevision,
+        onEdit: isOwner
+            ? (rev) {
+                Navigator.pop(ctx);
+                _openEditor(rev);
+              }
+            : null,
+        onDelete: isOwner ? _deleteLatestRevision : null,
       ),
     );
   }
@@ -161,6 +165,11 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
     nameCtrl.dispose();
     if (confirmed != true || !mounted) return;
 
+    final authState = ref.read(authNotifierProvider);
+    final currentUid =
+        authState is AuthAuthenticated ? authState.user.userId : '';
+    final isOwnRecipe = recipe.uid == currentUid;
+
     try {
       final revision = _revision;
       final revNotes = revision?.notes ?? '';
@@ -179,6 +188,8 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
         materials: revision?.materials ?? [],
         imageUrls: revision?.imageUrls ?? [],
         status: revision?.status ?? 'New',
+        duplicateOriginId: isOwnRecipe ? null : recipe.id,
+        duplicateOriginName: isOwnRecipe ? null : recipe.name,
       );
       ref.invalidate(recipesListProvider);
       if (mounted) context.push('/recipe/$newId');
@@ -195,6 +206,9 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
     final recipe   = widget.recipe;
     final revision = _revision;
     final scheme   = Theme.of(context).colorScheme;
+    final authState = ref.watch(authNotifierProvider);
+    final isOwner = authState is AuthAuthenticated &&
+        authState.user.userId == recipe.uid;
 
     final baseMaterials = revision?.materials.where((m) => !m.isAddition).toList() ?? [];
     final addMaterials  = revision?.materials.where((m) => m.isAddition).toList() ?? [];
@@ -216,11 +230,12 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
               pinned: true,
               title: Text(recipe.name),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined),
-                  tooltip: 'Edit',
-                  onPressed: () => _openEditor(_selectedRevision),
-                ),
+                if (isOwner)
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Edit',
+                    onPressed: () => _openEditor(_selectedRevision),
+                  ),
                 PopupMenuButton<_DetailAction>(
                   onSelected: (action) {
                     switch (action) {
@@ -284,6 +299,43 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
                       child: const Text('Latest'),
                     ),
                   ],
+                ),
+              ),
+
+            // ── Duplicate origin attribution ─────────────────────────────────
+            if ((recipe.duplicateOriginId ?? '').isNotEmpty)
+              InkWell(
+                onTap: () =>
+                    context.push('/recipe/${recipe.duplicateOriginId}'),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: scheme.outlineVariant, width: 0.5),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.content_copy_outlined,
+                          size: 14, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Adapted from "${recipe.duplicateOriginName}"',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right,
+                          size: 16, color: scheme.onSurfaceVariant),
+                    ],
+                  ),
                 ),
               ),
 
@@ -669,16 +721,16 @@ class _RevisionHistorySheet extends StatefulWidget {
     required this.current,
     required this.latestRevisionNum,
     required this.onSelect,
-    required this.onEdit,
-    required this.onDelete,
+    this.onEdit,
+    this.onDelete,
   });
   final List<RecipeRevision> embedded;
   final Future<List<RecipeRevision>>? future;
   final RecipeRevision? current;
   final int latestRevisionNum;
   final void Function(RecipeRevision) onSelect;
-  final void Function(RecipeRevision) onEdit;
-  final void Function(RecipeRevision) onDelete;
+  final void Function(RecipeRevision)? onEdit;
+  final void Function(RecipeRevision)? onDelete;
 
   @override
   State<_RevisionHistorySheet> createState() => _RevisionHistorySheetState();
@@ -725,7 +777,7 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    widget.onDelete(rev);
+    widget.onDelete?.call(rev);
     if (mounted) Navigator.pop(context);
   }
 
@@ -842,17 +894,20 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         _StatusChip(status: rev.status),
-                                        IconButton(
-                                          icon: const Icon(
-                                              Icons.edit_outlined,
-                                              size: 18),
-                                          tooltip: 'Edit this version',
-                                          onPressed: () =>
-                                              widget.onEdit(rev),
-                                          visualDensity:
-                                              VisualDensity.compact,
-                                        ),
-                                        if (isLatest && widget.latestRevisionNum > 1)
+                                        if (widget.onEdit != null)
+                                          IconButton(
+                                            icon: const Icon(
+                                                Icons.edit_outlined,
+                                                size: 18),
+                                            tooltip: 'Edit this version',
+                                            onPressed: () =>
+                                                widget.onEdit!(rev),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                        if (widget.onDelete != null &&
+                                            isLatest &&
+                                            widget.latestRevisionNum > 1)
                                           IconButton(
                                             icon: Icon(
                                                 Icons.delete_outline,

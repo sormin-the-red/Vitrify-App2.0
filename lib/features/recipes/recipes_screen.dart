@@ -85,6 +85,8 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
 
 // ── Recipe list tab ───────────────────────────────────────────────────────────
 
+enum _RecipeFilter { mine, saved }
+
 class _RecipeList extends ConsumerStatefulWidget {
   const _RecipeList();
 
@@ -94,13 +96,27 @@ class _RecipeList extends ConsumerStatefulWidget {
 
 class _RecipeListState extends ConsumerState<_RecipeList> {
   final Map<String, Timer> _pendingDeletes = {};
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+  _RecipeFilter _filter = _RecipeFilter.mine;
 
   @override
   void dispose() {
-    for (final t in _pendingDeletes.values) {
-      t.cancel();
-    }
+    for (final t in _pendingDeletes.values) t.cancel();
+    _searchCtrl.dispose();
     super.dispose();
+  }
+
+  bool _matches(RecipeSummary r) {
+    if (_query.isEmpty) return true;
+    final q = _query.toLowerCase();
+    return r.name.toLowerCase().contains(q) ||
+        r.cone.toLowerCase().contains(q) ||
+        r.firingType.toLowerCase().contains(q) ||
+        r.color.any((c) => c.toLowerCase().contains(q)) ||
+        r.finish.toLowerCase().contains(q) ||
+        r.surface.toLowerCase().contains(q) ||
+        r.transparency.toLowerCase().contains(q);
   }
 
   void _dismissRecipe(RecipeSummary recipe) {
@@ -136,53 +152,134 @@ class _RecipeListState extends ConsumerState<_RecipeList> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(recipesListProvider);
-    return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => _ErrorView(
-        message: '$e',
-        onRetry: () => ref.invalidate(recipesListProvider),
-      ),
-      data: (recipes) {
-        final visible = recipes.where((r) => !_pendingDeletes.containsKey(r.id)).toList();
-        if (visible.isEmpty && _pendingDeletes.isEmpty) {
-          return const _EmptyView(
-            icon: Icons.science_outlined,
-            label: 'No recipes yet.',
-            hint: 'Tap + to create your first recipe.',
-          );
-        }
-        return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(recipesListProvider),
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-            itemCount: visible.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (_, i) {
-              final recipe = visible[i];
-              return Dismissible(
-                key: ValueKey(recipe.id),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(Icons.delete_outline,
-                      color: Theme.of(context).colorScheme.onError),
+    final scheme = Theme.of(context).colorScheme;
+    final ownAsync = ref.watch(recipesListProvider);
+    final savedAsync = ref.watch(favoriteRecipesListProvider);
+    final activeAsync = _filter == _RecipeFilter.mine ? ownAsync : savedAsync;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+          child: TextField(
+            controller: _searchCtrl,
+            decoration: InputDecoration(
+              hintText: 'Search by name, cone, color...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              border: const OutlineInputBorder(),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              suffixIcon: _query.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() => _query = '');
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: const Text('Mine'),
+                selected: _filter == _RecipeFilter.mine,
+                onSelected: (_) => setState(() => _filter = _RecipeFilter.mine),
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('Saved'),
+                selected: _filter == _RecipeFilter.saved,
+                onSelected: (_) => setState(() => _filter = _RecipeFilter.saved),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: activeAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => _ErrorView(
+              message: '$e',
+              onRetry: () => ref.invalidate(
+                _filter == _RecipeFilter.mine
+                    ? recipesListProvider
+                    : favoriteRecipesListProvider,
+              ),
+            ),
+            data: (recipes) {
+              final isMine = _filter == _RecipeFilter.mine;
+              final visible = isMine
+                  ? recipes
+                      .where((r) =>
+                          !_pendingDeletes.containsKey(r.id) && _matches(r))
+                      .toList()
+                  : recipes.where(_matches).toList();
+
+              if (visible.isEmpty) {
+                if (isMine && _pendingDeletes.isEmpty && _query.isEmpty) {
+                  return const _EmptyView(
+                    icon: Icons.science_outlined,
+                    label: 'No recipes yet.',
+                    hint: 'Tap + to create your first recipe.',
+                  );
+                }
+                if (!isMine && _query.isEmpty) {
+                  return const _EmptyView(
+                    icon: Icons.favorite_outline,
+                    label: 'No saved recipes.',
+                    hint: 'Heart recipes in the community feed to save them here.',
+                  );
+                }
+                return _EmptyView(
+                  icon: Icons.search_off_outlined,
+                  label: 'No matches for "$_query".',
+                  hint: '',
+                );
+              }
+
+              return RefreshIndicator(
+                onRefresh: () async => ref.invalidate(
+                  isMine ? recipesListProvider : favoriteRecipesListProvider,
                 ),
-                onDismissed: (_) => _dismissRecipe(recipe),
-                child: _RecipeCard(
-                  recipe: recipe,
-                  onDelete: () => _confirmDelete(context, recipe),
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
+                  itemCount: visible.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final recipe = visible[i];
+                    if (!isMine) {
+                      return _RecipeCard(recipe: recipe, isFavorited: true);
+                    }
+                    return Dismissible(
+                      key: ValueKey(recipe.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20),
+                        decoration: BoxDecoration(
+                          color: scheme.error,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(Icons.delete_outline, color: scheme.onError),
+                      ),
+                      onDismissed: (_) => _dismissRecipe(recipe),
+                      child: _RecipeCard(
+                        recipe: recipe,
+                        onDelete: () => _confirmDelete(context, recipe),
+                      ),
+                    );
+                  },
                 ),
               );
             },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
@@ -198,7 +295,10 @@ class _RecipeListState extends ConsumerState<_RecipeList> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               try {
@@ -222,9 +322,10 @@ class _RecipeListState extends ConsumerState<_RecipeList> {
 }
 
 class _RecipeCard extends StatelessWidget {
-  const _RecipeCard({required this.recipe, required this.onDelete});
+  const _RecipeCard({required this.recipe, this.onDelete, this.isFavorited = false});
   final RecipeSummary recipe;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
+  final bool isFavorited;
 
   @override
   Widget build(BuildContext context) {
@@ -295,7 +396,9 @@ class _RecipeCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (recipe.isPublic)
+                  if (isFavorited)
+                    Icon(Icons.favorite, size: 15, color: scheme.error)
+                  else if (recipe.isPublic)
                     Icon(Icons.public, size: 15, color: scheme.primary),
                   if (recipe.revisionCount > 1) ...[
                     const SizedBox(height: 2),

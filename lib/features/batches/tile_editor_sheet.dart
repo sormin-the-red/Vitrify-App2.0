@@ -565,7 +565,7 @@ class _RecipePickerSheetState extends ConsumerState<_RecipePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final recipesAsync = ref.watch(recipesListProvider);
+    final recipesAsync = ref.watch(recipesAndFavoritesListProvider);
     final scheme = Theme.of(context).colorScheme;
 
     return Padding(
