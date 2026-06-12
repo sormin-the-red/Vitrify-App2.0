@@ -60,6 +60,17 @@ class FeedItem {
       );
 }
 
+/// One page of the global feed plus the cursor for the next page (null when
+/// there are no more items).
+class FeedPage {
+  final List<FeedItem> items;
+  final String? nextCursor;
+
+  const FeedPage({required this.items, this.nextCursor});
+
+  bool get hasMore => nextCursor != null && nextCursor!.isNotEmpty;
+}
+
 class FeedComment {
   final String commentId;
   final String uid;

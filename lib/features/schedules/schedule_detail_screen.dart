@@ -45,6 +45,12 @@ class _ScheduleViewState extends ConsumerState<_ScheduleView> {
   ScheduleRevision? get _revision =>
       _selectedRevision ?? widget.schedule.revision;
 
+  bool get _isOwner {
+    final authState = ref.read(authNotifierProvider);
+    return authState is AuthAuthenticated &&
+        authState.user.userId == widget.schedule.uid;
+  }
+
   @override
   void didUpdateWidget(_ScheduleView old) {
     super.didUpdateWidget(old);
@@ -123,14 +129,32 @@ class _ScheduleViewState extends ConsumerState<_ScheduleView> {
           setState(() => _selectedRevision = rev);
           Navigator.pop(ctx);
         },
-        onEdit: isOwner
+        onEdit: _isOwner
             ? (rev) {
                 Navigator.pop(ctx);
                 _openEditor(rev);
               }
             : null,
+        onDelete: _isOwner ? _deleteLatestRevision : null,
       ),
     );
+  }
+
+  Future<void> _deleteLatestRevision(ScheduleRevision rev) async {
+    try {
+      await ref
+          .read(schedulesRepositoryProvider)
+          .deleteRevision(widget.schedule.id, rev.revisionNum);
+      ref.invalidate(scheduleDetailProvider(widget.schedule.id));
+      ref.invalidate(scheduleRevisionsProvider(widget.schedule.id));
+      ref.invalidate(schedulesListProvider);
+      if (mounted) setState(() => _selectedRevision = null);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 
   Future<void> _duplicateSchedule() async {
@@ -431,6 +455,7 @@ class _RevisionHistorySheet extends StatefulWidget {
     required this.latestRevisionNum,
     required this.onSelect,
     this.onEdit,
+    this.onDelete,
   });
   final List<ScheduleRevision> embedded;
   final Future<List<ScheduleRevision>>? future;
@@ -438,6 +463,7 @@ class _RevisionHistorySheet extends StatefulWidget {
   final int latestRevisionNum;
   final void Function(ScheduleRevision) onSelect;
   final void Function(ScheduleRevision)? onEdit;
+  final void Function(ScheduleRevision)? onDelete;
 
   @override
   State<_RevisionHistorySheet> createState() => _RevisionHistorySheetState();
@@ -464,6 +490,30 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
     } else {
       _revisions = [];
     }
+  }
+
+  Future<void> _confirmDelete(ScheduleRevision rev) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete v${rev.revisionNum}?'),
+        content: Text(
+            'This can\'t be undone. The schedule will revert to v${rev.revisionNum - 1}.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    widget.onDelete?.call(rev);
+    if (mounted) Navigator.pop(context);
   }
 
   void _toggleCompare(int revNum) {
@@ -572,16 +622,36 @@ class _RevisionHistorySheetState extends State<_RevisionHistorySheet> {
                                           size: 20, color: Colors.grey)),
                               trailing: _compareMode
                                   ? null
-                                  : widget.onEdit != null
-                                      ? IconButton(
-                                          icon: const Icon(Icons.edit_outlined,
-                                              size: 18),
-                                          tooltip: 'Edit this version',
-                                          onPressed: () =>
-                                              widget.onEdit!(rev),
-                                          visualDensity: VisualDensity.compact,
-                                        )
-                                      : null,
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (widget.onEdit != null)
+                                          IconButton(
+                                            icon: const Icon(
+                                                Icons.edit_outlined,
+                                                size: 18),
+                                            tooltip: 'Edit this version',
+                                            onPressed: () =>
+                                                widget.onEdit!(rev),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                        if (widget.onDelete != null &&
+                                            isLatest &&
+                                            widget.latestRevisionNum > 1)
+                                          IconButton(
+                                            icon: Icon(
+                                                Icons.delete_outline,
+                                                size: 18,
+                                                color: Colors.red.shade300),
+                                            tooltip: 'Delete this revision',
+                                            onPressed: () =>
+                                                _confirmDelete(rev),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                      ],
+                                    ),
                               onTap: _compareMode
                                   ? () => _toggleCompare(rev.revisionNum)
                                   : () => widget.onSelect(rev),

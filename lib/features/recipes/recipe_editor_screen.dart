@@ -97,6 +97,9 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
 
   bool get _isEdit => widget.existing != null;
 
+  // Kept for future UI differentiation between latest/older revision editing
+  // (see CLAUDE.md — both branches currently route to updateRevision).
+  // ignore: unused_element
   bool get _isEditingLatest {
     if (!_isEdit) return true;
     final rev = widget.existing!.revision;
@@ -540,7 +543,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
           Row(children: [
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: _cones.contains(_cone) ? _cone : null,
+                initialValue: _cones.contains(_cone) ? _cone : null,
                 hint: const Text('Cone'),
                 decoration:
                     const InputDecoration(border: OutlineInputBorder()),
@@ -559,7 +562,7 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: _firingTypes.contains(_firingType) ? _firingType : null,
+                initialValue: _firingTypes.contains(_firingType) ? _firingType : null,
                 hint: const Text('Firing type'),
                 decoration:
                     const InputDecoration(border: OutlineInputBorder()),
@@ -725,9 +728,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               physics: const NeverScrollableScrollPhysics(),
               buildDefaultDragHandles: false,
               itemCount: _baseIngredients.length,
-              onReorder: (oldIndex, newIndex) {
+              onReorderItem: (oldIndex, newIndex) {
                 setState(() {
-                  if (newIndex > oldIndex) newIndex--;
                   final item = _baseIngredients.removeAt(oldIndex);
                   _baseIngredients.insert(newIndex, item);
                 });
@@ -783,9 +785,8 @@ class _RecipeEditorScreenState extends ConsumerState<RecipeEditorScreen> {
               physics: const NeverScrollableScrollPhysics(),
               buildDefaultDragHandles: false,
               itemCount: _additionIngredients.length,
-              onReorder: (oldIndex, newIndex) {
+              onReorderItem: (oldIndex, newIndex) {
                 setState(() {
-                  if (newIndex > oldIndex) newIndex--;
                   final item = _additionIngredients.removeAt(oldIndex);
                   _additionIngredients.insert(newIndex, item);
                 });
@@ -1523,7 +1524,7 @@ class _GlazeAttrsDialogState extends State<_GlazeAttrsDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<String>(
-            value: _finishOptions.contains(_finish) ? _finish : null,
+            initialValue: _finishOptions.contains(_finish) ? _finish : null,
             hint: const Text('Finish'),
             decoration: const InputDecoration(
                 labelText: 'Finish', border: OutlineInputBorder(), isDense: true),
@@ -1535,7 +1536,7 @@ class _GlazeAttrsDialogState extends State<_GlazeAttrsDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _surfaceOptions.contains(_surface) ? _surface : null,
+            initialValue: _surfaceOptions.contains(_surface) ? _surface : null,
             hint: const Text('Surface'),
             decoration: const InputDecoration(
                 labelText: 'Surface', border: OutlineInputBorder(), isDense: true),
@@ -1547,7 +1548,7 @@ class _GlazeAttrsDialogState extends State<_GlazeAttrsDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _transparencyOptions.contains(_transparency) ? _transparency : null,
+            initialValue: _transparencyOptions.contains(_transparency) ? _transparency : null,
             hint: const Text('Transparency'),
             decoration: const InputDecoration(
                 labelText: 'Transparency', border: OutlineInputBorder(), isDense: true),

@@ -131,15 +131,19 @@ class SettingsScreen extends ConsumerWidget {
 
           // ── Startup ───────────────────────────────────────────────────────
           const _SectionHeader('Startup'),
-          ..._startupTabs.map(
-            (tab) => RadioListTile<String>(
-              title: Text(tab.label),
-              secondary: Icon(tab.icon),
-              value: tab.route,
-              groupValue: settings.startupTab,
-              onChanged: (route) {
-                if (route != null) notifier.setStartupTab(route);
-              },
+          RadioGroup<String>(
+            groupValue: settings.startupTab,
+            onChanged: (route) {
+              if (route != null) notifier.setStartupTab(route);
+            },
+            child: Column(
+              children: _startupTabs
+                  .map((tab) => RadioListTile<String>(
+                        title: Text(tab.label),
+                        secondary: Icon(tab.icon),
+                        value: tab.route,
+                      ))
+                  .toList(),
             ),
           ),
         ],

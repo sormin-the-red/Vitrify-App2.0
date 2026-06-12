@@ -72,13 +72,59 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
 
 // ── Global feed tab ────────────────────────────────────────────────────────────
 
-class _GlobalFeedTab extends ConsumerWidget {
+class _GlobalFeedTab extends ConsumerStatefulWidget {
   const _GlobalFeedTab({required this.filterKey});
   final String filterKey;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(globalFeedProvider(filterKey));
+  ConsumerState<_GlobalFeedTab> createState() => _GlobalFeedTabState();
+}
+
+class _GlobalFeedTabState extends ConsumerState<_GlobalFeedTab> {
+  // Pages after the first, accumulated by load-more. The first page lives in
+  // the provider so pull-to-refresh invalidation resets everything.
+  final List<FeedItem> _extraItems = [];
+  String? _cursor;
+  bool _cursorFromFirstPage = false;
+  bool _loadingMore = false;
+
+  Future<void> _loadMore() async {
+    final cursor = _cursor;
+    if (cursor == null || _loadingMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final parts = widget.filterKey.split(':');
+      final page = await ref.read(communityRepositoryProvider).getGlobalFeed(
+            filter: parts[0],
+            type: parts.length > 1 ? parts[1] : 'all',
+            cursor: cursor,
+          );
+      if (!mounted) return;
+      setState(() {
+        _extraItems.addAll(page.items);
+        _cursor = page.hasMore ? page.nextCursor : null;
+      });
+    } catch (_) {
+      // Leave the cursor in place so a later scroll retries.
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Reset accumulated pages whenever the first page reloads (refresh).
+    ref.listen(globalFeedProvider(widget.filterKey), (prev, next) {
+      if (next is AsyncData<FeedPage>) {
+        setState(() {
+          _extraItems.clear();
+          _cursor = next.value.hasMore ? next.value.nextCursor : null;
+          _cursorFromFirstPage = true;
+        });
+      }
+    });
+
+    final async = ref.watch(globalFeedProvider(widget.filterKey));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(
@@ -91,16 +137,28 @@ class _GlobalFeedTab extends ConsumerWidget {
                 style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 12),
             FilledButton.tonal(
-              onPressed: () => ref.invalidate(globalFeedProvider(filterKey)),
+              onPressed: () =>
+                  ref.invalidate(globalFeedProvider(widget.filterKey)),
               child: const Text('Retry'),
             ),
           ],
         ),
       ),
-      data: (items) => _FeedList(
-        items: items,
-        onRefresh: () async => ref.invalidate(globalFeedProvider(filterKey)),
-      ),
+      data: (page) {
+        // ref.listen misses the very first data event when the widget mounts
+        // with data already available — seed the cursor here.
+        if (!_cursorFromFirstPage) {
+          _cursor = page.hasMore ? page.nextCursor : null;
+          _cursorFromFirstPage = true;
+        }
+        return _FeedList(
+          items: [...page.items, ..._extraItems],
+          onRefresh: () async =>
+              ref.invalidate(globalFeedProvider(widget.filterKey)),
+          onLoadMore: _cursor != null ? _loadMore : null,
+          loadingMore: _loadingMore,
+        );
+      },
     );
   }
 }
@@ -152,9 +210,16 @@ class _FollowingFeedContent extends ConsumerWidget {
 // ── Feed list ──────────────────────────────────────────────────────────────────
 
 class _FeedList extends StatelessWidget {
-  const _FeedList({required this.items, required this.onRefresh});
+  const _FeedList({
+    required this.items,
+    required this.onRefresh,
+    this.onLoadMore,
+    this.loadingMore = false,
+  });
   final List<FeedItem> items;
   final Future<void> Function() onRefresh;
+  final VoidCallback? onLoadMore;
+  final bool loadingMore;
 
   @override
   Widget build(BuildContext context) {
@@ -180,12 +245,38 @@ class _FeedList extends StatelessWidget {
       );
     }
 
+    final showFooter = onLoadMore != null || loadingMore;
+
     return RefreshIndicator(
       onRefresh: onRefresh,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-        itemCount: items.length,
-        itemBuilder: (ctx, i) => _FeedCard(item: items[i]),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (onLoadMore != null &&
+              !loadingMore &&
+              n.metrics.pixels >= n.metrics.maxScrollExtent - 400) {
+            onLoadMore!();
+          }
+          return false;
+        },
+        child: ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+          itemCount: items.length + (showFooter ? 1 : 0),
+          itemBuilder: (ctx, i) {
+            if (i >= items.length) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ),
+              );
+            }
+            return _FeedCard(item: items[i]);
+          },
+        ),
       ),
     );
   }

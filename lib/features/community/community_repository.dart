@@ -12,20 +12,27 @@ class CommunityRepository {
   CommunityRepository(this._api);
   final ApiClient _api;
 
-  Future<List<FeedItem>> getGlobalFeed({
+  Future<FeedPage> getGlobalFeed({
     String filter = 'new',
     String type = 'all',
     int limit = 30,
+    String? cursor,
   }) async {
-    final res =
-        await _api.get('/feed?filter=$filter&type=$type&limit=$limit');
+    var path = '/feed?filter=$filter&type=$type&limit=$limit';
+    if (cursor != null && cursor.isNotEmpty) {
+      path += '&cursor=${Uri.encodeQueryComponent(cursor)}';
+    }
+    final res = await _api.get(path);
     if (res.statusCode != 200) throw Exception('Failed to load feed');
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     final items = body['items'] as List<dynamic>? ?? [];
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(FeedItem.fromJson)
-        .toList();
+    return FeedPage(
+      items: items
+          .whereType<Map<String, dynamic>>()
+          .map(FeedItem.fromJson)
+          .toList(),
+      nextCursor: body['nextCursor'] as String?,
+    );
   }
 
   Future<List<FeedItem>> getFollowingFeed({int limit = 30}) async {
@@ -82,8 +89,10 @@ CommunityRepository communityRepository(CommunityRepositoryRef ref) =>
     CommunityRepository(ref.watch(apiClientProvider));
 
 /// [filterKey] is formatted as "filter:type" (e.g. "new:all", "popular:all", "new:schedules").
+/// Returns the first page; subsequent pages are fetched imperatively with the
+/// page's [FeedPage.nextCursor] (see `_GlobalFeedTab`).
 @riverpod
-Future<List<FeedItem>> globalFeed(GlobalFeedRef ref, String filterKey) {
+Future<FeedPage> globalFeed(GlobalFeedRef ref, String filterKey) {
   final parts = filterKey.split(':');
   final filter = parts[0];
   final type = parts.length > 1 ? parts[1] : 'all';

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,7 @@ import '../mixes/mix_models.dart';
 import '../mixes/mix_setup_sheet.dart';
 import '../mixes/mixes_repository.dart';
 import 'recipe_models.dart';
+import 'recipe_share_card.dart';
 import 'recipes_repository.dart';
 
 class RecipeDetailScreen extends ConsumerWidget {
@@ -64,6 +67,12 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
   RecipeRevision? get _revision =>
       _selectedRevision ?? widget.recipe.revision;
 
+  bool get _isOwner {
+    final authState = ref.read(authNotifierProvider);
+    return authState is AuthAuthenticated &&
+        authState.user.userId == widget.recipe.uid;
+  }
+
   double? get _batchGrams => double.tryParse(_scaleCtrl.text);
 
   void _showMixSetup() {
@@ -112,13 +121,13 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
           setState(() => _selectedRevision = rev);
           Navigator.pop(ctx);
         },
-        onEdit: isOwner
+        onEdit: _isOwner
             ? (rev) {
                 Navigator.pop(ctx);
                 _openEditor(rev);
               }
             : null,
-        onDelete: isOwner ? _deleteLatestRevision : null,
+        onDelete: _isOwner ? _deleteLatestRevision : null,
       ),
     );
   }
@@ -241,6 +250,9 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
                     switch (action) {
                       case _DetailAction.history:   _showRevisionHistory();
                       case _DetailAction.duplicate: _duplicateRecipe();
+                      case _DetailAction.share:
+                        showRecipeShareDialog(context,
+                            recipe: recipe, revision: _revision);
                     }
                   },
                   itemBuilder: (_) => [
@@ -259,6 +271,15 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
                       child: ListTile(
                         leading: Icon(Icons.copy_outlined),
                         title: Text('Duplicate'),
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: _DetailAction.share,
+                      child: ListTile(
+                        leading: Icon(Icons.ios_share_outlined),
+                        title: Text('Share as image'),
                         contentPadding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -541,7 +562,7 @@ class _RecipeViewState extends ConsumerState<_RecipeView> {
   }
 }
 
-enum _DetailAction { history, duplicate }
+enum _DetailAction { history, duplicate, share }
 
 // ── Photo carousel ────────────────────────────────────────────────────────────
 
@@ -1059,20 +1080,70 @@ class _DiffRowWidget extends StatelessWidget {
 
 // ── Mix history ───────────────────────────────────────────────────────────────
 
-class _MixHistory extends ConsumerWidget {
+class _MixHistory extends ConsumerStatefulWidget {
   const _MixHistory({required this.recipeId, required this.revisionNum});
   final String recipeId;
   final int revisionNum;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(recipeMixesProvider(recipeId));
+  ConsumerState<_MixHistory> createState() => _MixHistoryState();
+}
+
+class _MixHistoryState extends ConsumerState<_MixHistory> {
+  final Map<String, Timer> _pendingDeletes = {};
+
+  @override
+  void dispose() {
+    for (final t in _pendingDeletes.values) {
+      t.cancel();
+    }
+    super.dispose();
+  }
+
+  void _dismissMix(MixSummary mix) {
+    setState(() {
+      _pendingDeletes[mix.id]?.cancel();
+      _pendingDeletes[mix.id] = Timer(const Duration(seconds: 4), () async {
+        try {
+          await ref.read(mixesRepositoryProvider).deleteMix(mix.id);
+        } finally {
+          if (mounted) {
+            setState(() => _pendingDeletes.remove(mix.id));
+            ref.invalidate(recipeMixesProvider(widget.recipeId));
+          }
+        }
+      });
+    });
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Mix deleted'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            _pendingDeletes[mix.id]?.cancel();
+            setState(() => _pendingDeletes.remove(mix.id));
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(recipeMixesProvider(widget.recipeId));
     return async.when(
       loading: () => const SizedBox(
           height: 32, child: Center(child: CircularProgressIndicator())),
       error: (_, __) => const SizedBox.shrink(),
       data: (allMixes) {
-        final mixes = allMixes.where((m) => m.revisionNum == revisionNum).toList();
+        final mixes = allMixes
+            .where((m) =>
+                m.revisionNum == widget.revisionNum &&
+                !_pendingDeletes.containsKey(m.id))
+            .toList();
         if (mixes.isEmpty) return const SizedBox.shrink();
         final scheme = Theme.of(context).colorScheme;
         return Column(
@@ -1084,38 +1155,50 @@ class _MixHistory extends ConsumerWidget {
             ...mixes.take(5).map((m) {
               final isComplete = m.status == MixStatus.complete;
               final label = _fmtBatch(m);
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  radius: 14,
-                  backgroundColor: isComplete
-                      ? Colors.green.shade400.withValues(alpha: 0.15)
-                      : scheme.secondaryContainer,
-                  child: Icon(
-                    isComplete ? Icons.check : Icons.hourglass_top_outlined,
-                    size: 14,
-                    color: isComplete
-                        ? Colors.green.shade600
-                        : scheme.onSecondaryContainer,
+              return Dismissible(
+                key: ValueKey('mix-${m.id}'),
+                direction: DismissDirection.endToStart,
+                onDismissed: (_) => _dismissMix(m),
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 16),
+                  color: scheme.errorContainer,
+                  child: Icon(Icons.delete_outline,
+                      color: scheme.onErrorContainer),
+                ),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    radius: 14,
+                    backgroundColor: isComplete
+                        ? Colors.green.shade400.withValues(alpha: 0.15)
+                        : scheme.secondaryContainer,
+                    child: Icon(
+                      isComplete ? Icons.check : Icons.hourglass_top_outlined,
+                      size: 14,
+                      color: isComplete
+                          ? Colors.green.shade600
+                          : scheme.onSecondaryContainer,
+                    ),
                   ),
+                  title: Text(label, style: const TextStyle(fontSize: 13)),
+                  subtitle: Text(
+                    '${m.checkedCount} / ${m.totalCount} materials'
+                    '${isComplete ? " · complete" : ""}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  trailing: isComplete
+                      ? null
+                      : TextButton(
+                          onPressed: () =>
+                              context.push('/mix/${m.id}'),
+                          style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero),
+                          child: const Text('Resume'),
+                        ),
                 ),
-                title: Text(label, style: const TextStyle(fontSize: 13)),
-                subtitle: Text(
-                  '${m.checkedCount} / ${m.totalCount} materials'
-                  '${isComplete ? " · complete" : ""}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                trailing: isComplete
-                    ? null
-                    : TextButton(
-                        onPressed: () =>
-                            context.push('/mix/${m.id}'),
-                        style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero),
-                        child: const Text('Resume'),
-                      ),
               );
             }),
           ],

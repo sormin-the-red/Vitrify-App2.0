@@ -73,6 +73,11 @@ class MixesRepository {
     return GlazeMix.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
+  Future<void> deleteMix(String id) async {
+    final res = await _api.delete('/mixes/$id');
+    if (res.statusCode != 200) throw Exception('Failed to delete mix');
+  }
+
   Future<List<MixSummary>> getMixesForRecipe(String recipeId) async {
     final res = await _api.get('/mixes?recipeId=$recipeId');
     if (res.statusCode != 200) throw Exception('Failed to load mix history');

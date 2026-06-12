@@ -1,4 +1,4 @@
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
 
 // amplify_auth_cognito 2.x reads this key during configure() to decide
 // whether to run the OAuth session-restoration path. That path calls
@@ -7,5 +7,5 @@ import 'dart:html' as html;
 // to restore the session through the regular Cognito token path instead —
 // the access/id/refresh tokens stay intact so the user remains signed in.
 void clearHostedUiFlag() {
-  html.window.localStorage.remove('amplify-signin-with-hostedUI');
+  web.window.localStorage.removeItem('amplify-signin-with-hostedUI');
 }

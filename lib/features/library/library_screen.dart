@@ -19,7 +19,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -43,6 +43,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           controller: _tabController,
           tabs: const [
             Tab(text: 'Materials'),
+            Tab(text: 'Cones'),
             Tab(text: 'Learn'),
           ],
         ),
@@ -51,6 +52,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         controller: _tabController,
         children: const [
           _MaterialsTab(),
+          _ConesTab(),
           _LearnTab(),
         ],
       ),
@@ -336,6 +338,150 @@ class _OxideRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Cones tab ──────────────────────────────────────────────────────────────────
+
+class _ConeEntry {
+  const _ConeEntry(this.cone, this.fahrenheit, this.celsius, [this.note]);
+  final String cone;
+  final int fahrenheit;
+  final int celsius;
+  final String? note;
+}
+
+// Orton self-supporting cones, final temperature at the standard 108°F/hr
+// (60°C/hr) final ramp.
+const _coneChart = [
+  _ConeEntry('022', 1087, 586),
+  _ConeEntry('021', 1112, 600),
+  _ConeEntry('020', 1159, 626),
+  _ConeEntry('019', 1252, 678, 'Lusters, decals'),
+  _ConeEntry('018', 1319, 715),
+  _ConeEntry('017', 1360, 738),
+  _ConeEntry('016', 1422, 772),
+  _ConeEntry('015', 1456, 791),
+  _ConeEntry('014', 1485, 807),
+  _ConeEntry('013', 1539, 837),
+  _ConeEntry('012', 1582, 861),
+  _ConeEntry('011', 1607, 875),
+  _ConeEntry('010', 1657, 903),
+  _ConeEntry('09', 1688, 920),
+  _ConeEntry('08', 1728, 942),
+  _ConeEntry('07', 1789, 976),
+  _ConeEntry('06', 1828, 998, 'Common bisque'),
+  _ConeEntry('05', 1888, 1031, 'Low-fire glaze'),
+  _ConeEntry('04', 1945, 1063, 'Common bisque / earthenware'),
+  _ConeEntry('03', 1987, 1086),
+  _ConeEntry('02', 2016, 1102),
+  _ConeEntry('01', 2046, 1119),
+  _ConeEntry('1', 2079, 1137),
+  _ConeEntry('2', 2088, 1142),
+  _ConeEntry('3', 2106, 1152),
+  _ConeEntry('4', 2124, 1162),
+  _ConeEntry('5', 2167, 1186),
+  _ConeEntry('6', 2232, 1222, 'Mid-fire — most electric kilns'),
+  _ConeEntry('7', 2262, 1239),
+  _ConeEntry('8', 2280, 1249),
+  _ConeEntry('9', 2300, 1260),
+  _ConeEntry('10', 2345, 1285, 'High-fire — reduction stoneware'),
+  _ConeEntry('11', 2361, 1294),
+  _ConeEntry('12', 2383, 1306),
+];
+
+class _ConesTab extends StatelessWidget {
+  const _ConesTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final highlightCones = {'06', '04', '6', '10'};
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        Text(
+          'Orton self-supporting cones · final temperature at a 108°F/hr '
+          '(60°C/hr) final ramp. Slower firings reach the same cone at a '
+          'lower temperature (heat-work).',
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              SizedBox(
+                  width: 52,
+                  child: Text('Cone',
+                      style: Theme.of(context).textTheme.labelSmall)),
+              Expanded(
+                  child: Text('°F',
+                      textAlign: TextAlign.end,
+                      style: Theme.of(context).textTheme.labelSmall)),
+              Expanded(
+                  child: Text('°C',
+                      textAlign: TextAlign.end,
+                      style: Theme.of(context).textTheme.labelSmall)),
+              const SizedBox(width: 12),
+              Expanded(
+                  flex: 3,
+                  child: Text('Typical use',
+                      style: Theme.of(context).textTheme.labelSmall)),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        ..._coneChart.map((e) {
+          final highlight = highlightCones.contains(e.cone);
+          return Container(
+            decoration: highlight
+                ? BoxDecoration(
+                    color: scheme.primaryContainer.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(6),
+                  )
+                : null,
+            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 48,
+                  child: Text(
+                    '▲ ${e.cone}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight:
+                          highlight ? FontWeight.w700 : FontWeight.w500,
+                      color: highlight ? scheme.primary : null,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text('${e.fahrenheit}',
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(fontSize: 13)),
+                ),
+                Expanded(
+                  child: Text('${e.celsius}',
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(fontSize: 13)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    e.note ?? '',
+                    style: TextStyle(
+                        fontSize: 11, color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 }

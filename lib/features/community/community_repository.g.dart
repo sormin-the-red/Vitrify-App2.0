@@ -63,7 +63,7 @@ class GlobalFeedFamily extends Family {
 }
 
 /// @macro
-class GlobalFeedProvider extends AutoDisposeFutureProvider<List<FeedItem>> {
+class GlobalFeedProvider extends AutoDisposeFutureProvider<FeedPage> {
   /// @macro
   GlobalFeedProvider(String filter)
       : this._internal(
@@ -93,7 +93,7 @@ class GlobalFeedProvider extends AutoDisposeFutureProvider<List<FeedItem>> {
 
   @override
   Override overrideWith(
-    FutureOr<List<FeedItem>> Function(GlobalFeedRef ref) create,
+    FutureOr<FeedPage> Function(GlobalFeedRef ref) create,
   ) {
     return ProviderOverride(
       origin: this,
@@ -113,7 +113,7 @@ class GlobalFeedProvider extends AutoDisposeFutureProvider<List<FeedItem>> {
   (String,) get argument => (filter,);
 
   @override
-  AutoDisposeFutureProviderElement<List<FeedItem>> createElement() {
+  AutoDisposeFutureProviderElement<FeedPage> createElement() {
     return _GlobalFeedProviderElement(this);
   }
 
@@ -127,12 +127,12 @@ class GlobalFeedProvider extends AutoDisposeFutureProvider<List<FeedItem>> {
 }
 
 /// @macro riverpod_annotation.riverpod_element
-mixin GlobalFeedRef on AutoDisposeFutureProviderRef<List<FeedItem>> {
+mixin GlobalFeedRef on AutoDisposeFutureProviderRef<FeedPage> {
   String get filter;
 }
 
 class _GlobalFeedProviderElement
-    extends AutoDisposeFutureProviderElement<List<FeedItem>>
+    extends AutoDisposeFutureProviderElement<FeedPage>
     with GlobalFeedRef {
   _GlobalFeedProviderElement(super.provider);
 

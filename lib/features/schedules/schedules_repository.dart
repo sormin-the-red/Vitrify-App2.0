@@ -142,6 +142,11 @@ class SchedulesRepository {
     if (res.statusCode != 200) throw Exception('Failed to delete schedule');
   }
 
+  Future<void> deleteRevision(String id, int revNum) async {
+    final res = await _api.delete('/schedules/$id/revisions/$revNum');
+    if (res.statusCode != 200) throw Exception('Failed to delete revision');
+  }
+
   Future<String> duplicateSchedule(String id) async {
     final detail = await getSchedule(id);
     final segs = detail.revision?.segments ?? [];

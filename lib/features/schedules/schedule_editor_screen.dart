@@ -102,7 +102,9 @@ class _ScheduleEditorScreenState extends ConsumerState<ScheduleEditorScreen> {
     );
   }
 
-  // True when editing the latest revision (or creating new).
+  // True when editing the latest revision (or creating new). Kept for future
+  // UI differentiation (see CLAUDE.md — saves always route to updateRevision).
+  // ignore: unused_element
   bool get _isEditingLatest {
     if (!_isEdit) return true;
     final rev = widget.existing!.revision;

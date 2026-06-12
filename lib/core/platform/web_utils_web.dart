@@ -1,12 +1,28 @@
-// ignore_for_file: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:js_interop';
+import 'dart:typed_data';
 
-String getWindowHref() => html.window.location.href;
+import 'package:web/web.dart' as web;
+
+String getWindowHref() => web.window.location.href;
 
 void replaceWindowState(String url) {
-  html.window.history.replaceState(null, '', url);
+  web.window.history.replaceState(null, '', url);
 }
 
 void navigateTo(String url) {
-  html.window.location.href = url;
+  web.window.location.href = url;
+}
+
+/// Triggers a browser download of [bytes] as [filename].
+void downloadBytes(String filename, Uint8List bytes) {
+  final blob = web.Blob(
+    [bytes.toJS].toJS,
+    web.BlobPropertyBag(type: 'image/png'),
+  );
+  final url = web.URL.createObjectURL(blob);
+  final anchor = web.document.createElement('a') as web.HTMLAnchorElement
+    ..href = url
+    ..download = filename;
+  anchor.click();
+  web.URL.revokeObjectURL(url);
 }

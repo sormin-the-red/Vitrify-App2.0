@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../recipes/recipe_models.dart';
-import 'mix_models.dart';
 import 'mixes_repository.dart';
 
 class MixSetupSheet extends ConsumerStatefulWidget {
