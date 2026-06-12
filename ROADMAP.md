@@ -183,12 +183,11 @@ authenticated. Fine in beta; not at launch.
 
 ## Tier 4 — backend hygiene & later bets
 
-### 10. Orphan cleanup on recipe/schedule delete — S/M (backend)
-**Plan:** In `DeleteRecipe`: (a) parse S3 keys out of every revision's
-`imageUrls` and batch-delete from the images bucket; (b) query
-`pk = USER#{uid}/RECIPE#{id}` and delete mix-history index items. Leave hearts
-lazy (favorites already skips missing recipes) — a `targetId` GSI isn't worth
-it yet. Mirror for schedules (no images there).
+### 10. Orphan cleanup on recipe/batch delete — S/M (backend) — ✅ done
+Shipped 2026-06-12: recipe delete removes revision images from S3 (best-effort),
+mix-history index items, and the mix METADATA they point to; batch delete
+removes tile photos from S3. Schedules needed nothing (no images, no mixes).
+Hearts remain lazy by design.
 
 ### 11. Push notifications — L (defer)
 Comment/heart/follow notifications. Needs FCM + APNs setup, device-token
