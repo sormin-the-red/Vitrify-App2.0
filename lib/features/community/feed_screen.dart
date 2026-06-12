@@ -327,6 +327,20 @@ class _FeedCard extends ConsumerWidget {
                         ),
                       ],
                     ),
+                    if (item.uid.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      GestureDetector(
+                        onTap: () => context.push('/user/${item.uid}'),
+                        child: Text(
+                          'by ${item.displayName.isEmpty ? "a potter" : item.displayName}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                     if (item.description.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(

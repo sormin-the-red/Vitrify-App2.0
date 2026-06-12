@@ -82,6 +82,44 @@ class CommunityRepository {
       'parentCommentId': ?parentId,
     });
   }
+
+  Future<PublicProfile> getUserProfile(String uid) async {
+    final res = await _api.get('/users/$uid');
+    if (res.statusCode != 200) throw Exception('Failed to load profile');
+    return PublicProfile.fromJson(
+        jsonDecode(res.body) as Map<String, dynamic>);
+  }
+
+  Future<List<FeedItem>> getUserRecipes(String uid) async {
+    final res = await _api.get('/users/$uid/recipes');
+    if (res.statusCode != 200) throw Exception('Failed to load recipes');
+    final list = jsonDecode(res.body) as List<dynamic>;
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(FeedItem.fromJson)
+        .toList();
+  }
+
+  Future<void> follow(String uid) async {
+    final res = await _api.post('/users/$uid/follow');
+    if (res.statusCode != 200) throw Exception('Failed to follow');
+  }
+
+  Future<void> unfollow(String uid) async {
+    final res = await _api.delete('/users/$uid/follow');
+    if (res.statusCode != 200) throw Exception('Failed to unfollow');
+  }
+
+  /// Whether the signed-in user follows [uid] — derived from their own
+  /// following list (no dedicated endpoint).
+  Future<bool> isFollowing(String myUid, String uid) async {
+    final res = await _api.get('/users/$myUid/following');
+    if (res.statusCode != 200) return false;
+    final list = jsonDecode(res.body) as List<dynamic>;
+    return list
+        .whereType<Map<String, dynamic>>()
+        .any((f) => f['uid'] == uid);
+  }
 }
 
 @Riverpod(keepAlive: true)
@@ -102,3 +140,11 @@ Future<FeedPage> globalFeed(GlobalFeedRef ref, String filterKey) {
 @riverpod
 Future<List<FeedItem>> followingFeed(FollowingFeedRef ref) =>
     ref.watch(communityRepositoryProvider).getFollowingFeed();
+
+@riverpod
+Future<PublicProfile> userProfile(UserProfileRef ref, String uid) =>
+    ref.watch(communityRepositoryProvider).getUserProfile(uid);
+
+@riverpod
+Future<List<FeedItem>> userRecipes(UserRecipesRef ref, String uid) =>
+    ref.watch(communityRepositoryProvider).getUserRecipes(uid);

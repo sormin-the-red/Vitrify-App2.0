@@ -65,7 +65,13 @@ groups. Cheap to build, spreads the app organically.
 
 ## Tier 2 — closes existing loops
 
-### 4. Public user profiles — M (frontend) + S (backend)
+> **Status: Tier 2 shipped 2026-06-12** (backend deployed; snapshot triggered
+> manually once so Popular works immediately). Notes: offline cache went with
+> SharedPreferences on all platforms instead of sqflite (web-compatible, one
+> code path) — `sqflite`/`path`/`path_provider` deps removed. `displayName` on
+> old items backfills lazily as each recipe/schedule is next saved.
+
+### 4. Public user profiles — M (frontend) + S (backend) — ✅ done
 **Why:** The backend already serves public profiles, follower lists, and a
 following feed — but the app has no `/user/:uid` route. You can't tap a feed
 item's author, so following is blind. This is the missing half of community.
@@ -91,7 +97,7 @@ item's author, so following is blind. This is the missing half of community.
    `userRecipesProvider(uid)`. Repository methods in `community_repository.dart`.
 6. Make the author area of `_FeedCard` tappable → `context.push('/user/$uid')`.
 
-### 5. Offline support, phase 1: read-only cache — M
+### 5. Offline support, phase 1: read-only cache — M — ✅ done
 **Why:** Studios have terrible Wi-Fi, and the moments the app matters most
 (reading a recipe while mixing, logging a tile at the kiln) are exactly when
 you're offline. `sqflite` and `connectivity_plus` are already in pubspec, unused.
@@ -112,7 +118,7 @@ you're offline. `sqflite` and `connectivity_plus` are already in pubspec, unused
 5. **Phase 2 (separate, L):** mutation outbox with replay — design later;
    conflict story needed because of the revision system.
 
-### 6. Honest "Popular" feed — M (backend only)
+### 6. Honest "Popular" feed — M (backend only) — ✅ done
 **Why:** The Popular tab currently just re-sorts whatever page it fetched by
 likes. With more than one page of content it's misleading.
 

@@ -11,6 +11,7 @@ import '../../features/auth/register_screen.dart';
 import '../../features/auth/confirm_screen.dart' show ConfirmScreen, ConfirmArgs;
 import '../../features/shell/shell_screen.dart';
 import '../../features/community/feed_screen.dart';
+import '../../features/community/user_profile_screen.dart';
 import '../../features/recipes/recipes_screen.dart';
 import '../../features/recipes/recipe_detail_screen.dart';
 import '../../features/recipes/recipe_editor_screen.dart';
@@ -113,6 +114,13 @@ GoRouter appRouter(AppRouterRef ref) {
       GoRoute(
         path: '/profile',
         pageBuilder: (_, state) => _slide(state, const ProfileScreen()),
+      ),
+      GoRoute(
+        path: '/user/:uid',
+        pageBuilder: (_, state) => _slide(
+          state,
+          UserProfileScreen(uid: state.pathParameters['uid']!),
+        ),
       ),
       GoRoute(
         path: '/settings',

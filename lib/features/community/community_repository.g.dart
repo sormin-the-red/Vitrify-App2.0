@@ -160,5 +160,235 @@ final followingFeedProvider =
 // ignore: unused_element
 typedef FollowingFeedRef = AutoDisposeFutureProviderRef<List<FeedItem>>;
 
+String _$userProfileHash() =>
+    r'c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d5';
+
+/// See also [userProfile].
+@ProviderFor(userProfile)
+const userProfileProvider = UserProfileFamily();
+
+/// @macro riverpod_annotation.riverpod_family
+class UserProfileFamily extends Family {
+  /// @macro riverpod_annotation.riverpod_family
+  const UserProfileFamily();
+
+  /// @macro
+  UserProfileProvider call(String uid) => UserProfileProvider(uid);
+
+  @override
+  UserProfileProvider getProviderOverride(
+    covariant UserProfileProvider provider,
+  ) {
+    return call(provider.uid);
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'userProfileProvider';
+}
+
+/// @macro
+class UserProfileProvider extends AutoDisposeFutureProvider<PublicProfile> {
+  /// @macro
+  UserProfileProvider(String uid)
+      : this._internal(
+          (ref) => userProfile(ref as UserProfileRef, uid),
+          from: userProfileProvider,
+          name: r'userProfileProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$userProfileHash,
+          dependencies: null,
+          allTransitiveDependencies: null,
+          uid: uid,
+        );
+
+  UserProfileProvider._internal(
+    super.create, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.uid,
+  }) : super.internal();
+
+  final String uid;
+
+  @override
+  Override overrideWith(
+    FutureOr<PublicProfile> Function(UserProfileRef ref) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: UserProfileProvider._internal(
+        (ref) => create(ref as UserProfileRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        uid: uid,
+      ),
+    );
+  }
+
+  @override
+  (String,) get argument => (uid,);
+
+  @override
+  AutoDisposeFutureProviderElement<PublicProfile> createElement() {
+    return _UserProfileProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is UserProfileProvider && other.uid == uid;
+  }
+
+  @override
+  int get hashCode => uid.hashCode;
+}
+
+/// @macro riverpod_annotation.riverpod_element
+mixin UserProfileRef on AutoDisposeFutureProviderRef<PublicProfile> {
+  String get uid;
+}
+
+class _UserProfileProviderElement
+    extends AutoDisposeFutureProviderElement<PublicProfile>
+    with UserProfileRef {
+  _UserProfileProviderElement(super.provider);
+
+  @override
+  String get uid => (origin as UserProfileProvider).uid;
+}
+
+String _$userRecipesHash() =>
+    r'd4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e6';
+
+/// See also [userRecipes].
+@ProviderFor(userRecipes)
+const userRecipesProvider = UserRecipesFamily();
+
+/// @macro riverpod_annotation.riverpod_family
+class UserRecipesFamily extends Family {
+  /// @macro riverpod_annotation.riverpod_family
+  const UserRecipesFamily();
+
+  /// @macro
+  UserRecipesProvider call(String uid) => UserRecipesProvider(uid);
+
+  @override
+  UserRecipesProvider getProviderOverride(
+    covariant UserRecipesProvider provider,
+  ) {
+    return call(provider.uid);
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'userRecipesProvider';
+}
+
+/// @macro
+class UserRecipesProvider extends AutoDisposeFutureProvider<List<FeedItem>> {
+  /// @macro
+  UserRecipesProvider(String uid)
+      : this._internal(
+          (ref) => userRecipes(ref as UserRecipesRef, uid),
+          from: userRecipesProvider,
+          name: r'userRecipesProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$userRecipesHash,
+          dependencies: null,
+          allTransitiveDependencies: null,
+          uid: uid,
+        );
+
+  UserRecipesProvider._internal(
+    super.create, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.uid,
+  }) : super.internal();
+
+  final String uid;
+
+  @override
+  Override overrideWith(
+    FutureOr<List<FeedItem>> Function(UserRecipesRef ref) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: UserRecipesProvider._internal(
+        (ref) => create(ref as UserRecipesRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        uid: uid,
+      ),
+    );
+  }
+
+  @override
+  (String,) get argument => (uid,);
+
+  @override
+  AutoDisposeFutureProviderElement<List<FeedItem>> createElement() {
+    return _UserRecipesProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is UserRecipesProvider && other.uid == uid;
+  }
+
+  @override
+  int get hashCode => uid.hashCode;
+}
+
+/// @macro riverpod_annotation.riverpod_element
+mixin UserRecipesRef on AutoDisposeFutureProviderRef<List<FeedItem>> {
+  String get uid;
+}
+
+class _UserRecipesProviderElement
+    extends AutoDisposeFutureProviderElement<List<FeedItem>>
+    with UserRecipesRef {
+  _UserRecipesProviderElement(super.provider);
+
+  @override
+  String get uid => (origin as UserRecipesProvider).uid;
+}
+
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

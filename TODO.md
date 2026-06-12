@@ -24,10 +24,9 @@ _Last reviewed: 2026-06-12_
 - [ ] **Regenerate `.g.dart` files with build_runner** (Flutter/Dart ARE on PATH in
   the dev shell despite what CLAUDE.md says) — or plan the Riverpod 3 migration;
   the hand-written files use `*Ref` types that are removed in 3.0.
-- [ ] **Offline support decision** — `sqflite` is in `pubspec.yaml` but unused.
-  Either build offline caching for recipes/schedules or remove the dependency.
-- [ ] **Feed "Popular" tab is page-local** — the backend only re-sorts the current
-  page by likes. Needs a backend ranking index before the tab is honest.
+- [ ] **Offline phase 2: write outbox** — reads now work offline (Tier 2);
+  queued/replayed mutations need a design first (conflict story vs. the
+  revision system).
 
 ## Low priority / cleanup
 
@@ -36,8 +35,8 @@ _Last reviewed: 2026-06-12_
 - [ ] Materials CDN URL in `materials_repository.dart` must be re-verified after any
   infra redeploy (and `assets/materials/v1.json` re-uploaded if the bucket was
   recreated).
-- [ ] Update CLAUDE.md: Flutter/Dart are on PATH in the dev shell; codegen via
-  build_runner is possible.
+- [ ] Backfill `displayName` on pre-2026-06-12 recipes/schedules (one-off script),
+  or just let it fill in lazily as items are saved.
 
 ## Resolved (2026-06-12 sessions)
 

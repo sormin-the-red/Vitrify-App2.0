@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../core/network/connectivity_provider.dart';
 
 class ShellScreen extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
@@ -13,6 +16,13 @@ class ShellScreen extends StatelessWidget {
         children: [
           // Main content — push bottom padding so nothing hides behind the nav bar
           Positioned.fill(child: navigationShell),
+          // Offline indicator (sits above content, below the nav bar)
+          const Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: _OfflineBanner(),
+          ),
           // Floating pill nav bar
           Positioned(
             left: 12,
@@ -28,6 +38,48 @@ class ShellScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Thin banner shown while the device has no connectivity. Reads served from
+/// the response cache keep working; saves will fail until back online.
+class _OfflineBanner extends ConsumerWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final offline = ref.watch(isOfflineProvider).valueOrNull ?? false;
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: !offline
+          ? const SizedBox.shrink()
+          : Material(
+              color: scheme.tertiaryContainer,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.cloud_off_outlined,
+                          size: 14, color: scheme.onTertiaryContainer),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Offline — showing saved data',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onTertiaryContainer,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
     );
   }
 }
