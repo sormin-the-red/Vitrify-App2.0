@@ -2,6 +2,35 @@
 
 A cross-platform ceramic glazing application for potters. Built with Flutter and powered by AWS.
 
+## Architecture
+
+A feature-first Flutter app — one codebase targeting Android, iOS, and web — that talks to a serverless AWS backend, with **offline-first caching** and **client-side glaze chemistry** so the calculator and materials reference work with no network.
+
+```mermaid
+flowchart TD
+    subgraph app["GlazeVault · Flutter — Android · iOS · Web"]
+        ui["Feature modules<br/>recipes · schedules · mixes · batches ·<br/>inventory · community · library · profile"]
+        core["Core services<br/>auth · network · chemistry (UMF) · materials · cache"]
+        ui -->|"Riverpod state · go_router"| core
+    end
+
+    core -->|"Amplify Auth (JWT)"| cognito["AWS Cognito"]
+    core -->|"HTTPS · Bearer JWT"| backend["GlazeVault backend<br/>API Gateway · Lambda · DynamoDB"]
+    core -->|"offline-first reads"| sqlite[("Local SQLite cache")]
+    materials[("Bundled materials DB<br/>~1000 oxide analyses")] -.->|"offline reference"| core
+```
+
+**Structure** — `lib/features/*` (recipes, schedules, mixes, batches, inventory, community, library, profile, settings, shell) holds screens and feature logic; `lib/core/*` holds cross-cutting services:
+
+- **`chemistry`** — an on-device **UMF / Seger calculator** (Stull-chart position, mole %, formula readouts) that runs offline over the bundled materials data.
+- **`materials`** — repository over the ~1,000-material oxide dataset.
+- **`cache`** — offline-first response caching (SQLite), so the library and saved recipes work without a connection.
+- **`network`** — typed HTTP client that attaches the Cognito JWT to backend calls.
+- **`auth`** — Amplify Cognito (email + Google/Facebook).
+- **`router` / state** — `go_router` navigation; Riverpod state management (with codegen).
+
+**Highlights:** one codebase across three platforms; offline-first (chemistry, materials reference, and cached reads work with no network); the UMF math runs on-device, so the calculator is instant and round-trip-free.
+
 ## Features
 
 - **Recipe Management** — create and track glaze recipes with full linear revision history
@@ -23,7 +52,7 @@ A cross-platform ceramic glazing application for potters. Built with Flutter and
 | Navigation | go_router |
 | Local Storage | SQLite |
 | Platforms | Android, iOS, Web |
-| Backend | [vitrify-backend](https://github.com/Sormin/vitrify-backend) |
+| Backend | [vitrify-backend](https://github.com/sormin-the-red/vitrify-backend) |
 
 ## Platform Priority
 
@@ -50,7 +79,7 @@ flutter build web       # Web
 
 ## Backend
 
-AWS infrastructure and Lambda functions live in [vitrify-backend](https://github.com/Sormin/vitrify-backend).
+AWS infrastructure and Lambda functions live in [vitrify-backend](https://github.com/sormin-the-red/vitrify-backend).
 
 ## Materials Database
 
