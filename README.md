@@ -1,4 +1,4 @@
-# GlazeVault
+# Vitrify
 
 A cross-platform ceramic glazing application for potters. Built with Flutter and powered by AWS.
 
